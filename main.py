@@ -7,7 +7,7 @@ import socket
 context = ssl.create_default_context()
 context.check_hostname = False
 context.verify_mode = ssl.CERT_NONE
-# context.set_ciphers("HIGH:!aNULL:!MD5:!RC4")
+
 # По желанию, можно указать конкретную версию TLS:
 # context.minimum_version = ssl.TLSVersion.TLSv1_2  # требовать хотя бы TLS 1.2
 
@@ -45,7 +45,7 @@ def upload_file_to_printer(
     password: str,
     local_path: str,
     remote_dir: str = "/",
-    blocksize = 1024 * 1024,   # размер блока 1 MB
+    blocksize = 32 * 1024,   # размер блока 32 KB
 ):
     ftps = None
     try:
@@ -77,10 +77,11 @@ def upload_file_to_printer(
                 print(f"\rПрогресс: {percent:6.2f}%", end="")
                 last_update = now
 
+        ftps.sock.settimeout(30)
+        
         # Загружаем файл
         with open(local_path, "rb") as f:
             ftps.storbinary(f"STOR {filename}", f, blocksize, callback=handle_block)
-
         print("\nЗагрузка завершена!")
 
     except (socket.timeout, ssl.SSLError, *ftplib.all_errors) as e:
@@ -102,7 +103,7 @@ def upload_file_to_printer(
 host = "192.168.1.130"      # IP-адрес принтера в сети
 user = "bblp"            # имя пользователя Bambu Lab (фиксированное)
 password = "241cf96e" # пароль: код доступа с экрана принтера
-local_path = "C:\Work\PrintFarm\Екулеоуцке.3mf"
+local_path = "t1.gcode.3mf"
 ftps = None
 try:
     ftps = ImplicitFTP_TLS()
