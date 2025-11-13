@@ -1,11 +1,13 @@
 import ftplib
 import ssl
+import time
 import socket
 
 # Настроить SSL-контекст: при необходимости отключаем проверку сертификата (для самоподписанного сертификата принтера)
 context = ssl.create_default_context()
 context.check_hostname = False
 context.verify_mode = ssl.CERT_NONE
+# context.set_ciphers("HIGH:!aNULL:!MD5:!RC4")
 # По желанию, можно указать конкретную версию TLS:
 # context.minimum_version = ssl.TLSVersion.TLSv1_2  # требовать хотя бы TLS 1.2
 
@@ -42,7 +44,8 @@ def upload_file_to_printer(
     user: str,
     password: str,
     local_path: str,
-    remote_dir: str = "/",   # можно поменять на нужную папку
+    remote_dir: str = "/",
+    blocksize = 1024 * 1024,   # размер блока 1 MB
 ):
     ftps = None
     try:
@@ -55,34 +58,44 @@ def upload_file_to_printer(
         if remote_dir:
             ftps.cwd(remote_dir)
 
-        # Имя файла на принтере
+        # Имя файла
         import os
         filename = os.path.basename(local_path)
+        filesize = os.path.getsize(local_path)
 
-        # Открываем локальный файл в бинарном режиме и отправляем
+        print(f"Загрузка '{filename}' ({filesize/1024/1024:.2f} MB)...")
+
+        bytes_sent = 0
+        last_update = 0
+        # Функция для отображения прогресса
+        def handle_block(block):
+            nonlocal bytes_sent, last_update
+            bytes_sent += len(block)
+            now = time.time()
+            if now - last_update > 0.3:  # обновлять 3 раза в секунду
+                percent = bytes_sent / filesize * 100
+                print(f"\rПрогресс: {percent:6.2f}%", end="")
+                last_update = now
+
+        # Загружаем файл
         with open(local_path, "rb") as f:
-            cmd = f"STOR {filename}"
-            ftps.storbinary(cmd, f)
+            ftps.storbinary(f"STOR {filename}", f, blocksize, callback=handle_block)
 
-        print(f"Файл '{filename}' отправлен в '{remote_dir}' на принтер.")
-
-        # Можно проверить, что файл появился:
-        print("Содержимое директории после загрузки:")
-        for name in ftps.nlst():
-            print(" ", name)
+        print("\nЗагрузка завершена!")
 
     except (socket.timeout, ssl.SSLError, *ftplib.all_errors) as e:
-        print(f"Ошибка при загрузке файла: {e}")
+        print(f"\nОшибка при загрузке файла: {e}")
     finally:
         if ftps:
             try:
                 if ftps.sock:
                     ftps.quit()
-            except Exception:
+            except:
                 try:
                     ftps.close()
-                except Exception:
+                except:
                     pass
+
 
 
 # Параметры подключения
