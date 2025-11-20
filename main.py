@@ -2,6 +2,11 @@ import ftplib
 import ssl
 import time
 import socket
+import time
+import bambulabs_api as bl
+import time
+
+
 
 # Настроить SSL-контекст: при необходимости отключаем проверку сертификата (для самоподписанного сертификата принтера)
 context = ssl.create_default_context()
@@ -78,7 +83,7 @@ def upload_file_to_printer(
                 last_update = now
 
         ftps.sock.settimeout(30)
-        
+
         # Загружаем файл
         with open(local_path, "rb") as f:
             ftps.storbinary(f"STOR {filename}", f, blocksize, callback=handle_block)
@@ -103,7 +108,8 @@ def upload_file_to_printer(
 host = "192.168.1.130"      # IP-адрес принтера в сети
 user = "bblp"            # имя пользователя Bambu Lab (фиксированное)
 password = "241cf96e" # пароль: код доступа с экрана принтера
-local_path = "t1.gcode.3mf"
+SERIAL = '00M09D461602386'
+local_path = "AI.gcode.3mf"
 ftps = None
 try:
     ftps = ImplicitFTP_TLS()
@@ -133,3 +139,18 @@ finally:
                 ftps.close()
             except:
                 pass
+
+# Запуск загруженного файла 
+printer = bl.Printer(host, password, SERIAL)
+printer.mqtt_start()
+
+time.sleep(2)
+
+print(printer.get_state())
+print(printer.get_bed_temperature())
+time.sleep(2)
+
+print(printer.start_print(local_path,1))
+
+time.sleep(2)
+printer.mqtt_stop()
