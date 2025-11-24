@@ -98,6 +98,39 @@ def upload_file_to_printer(
                 except:
                     pass
 
+
+
+def start_print_on_printer(
+    ip: str,
+    access_code: str,
+    serial: str,
+    filename: str,
+    plate_num: int = 1,
+) -> None:
+    """
+    Запуск печати через bambulabs_api (MQTT).
+
+    ip          - IP принтера
+    access_code - access code
+    serial      - серийный номер
+    filename    - имя файла на принтере (как лежит на SD, напр. "AI.gcode.3mf")
+    plate_num   - номер пластины (обычно 1)
+    """
+    print(f"[PRINT] Start {filename} on {ip} ({serial})")
+    printer = bl.Printer(ip, access_code, serial)
+    printer.mqtt_start()
+    try:
+        time.sleep(0.3)
+        state = printer.get_state()
+        print("[PRINT] State:", state)
+        printer.start_print(filename, plate_num, use_ams=False)
+        print("[PRINT] start_print() called")
+    finally:
+        time.sleep(0.3)
+        printer.mqtt_stop()
+
+
+
 def upload_and_start_file_to_printer(
     ip: str,
     user: str,
@@ -152,7 +185,7 @@ def upload_and_start_file_to_printer(
             time.sleep(0.5)
             state = printer.get_state()
             print("[PRINT] State:", state)
-            printer.start_print(filename, plate_number=1)
+            printer.start_print(filename, plate_number=1,use_ams=False)
             print("[PRINT] start_print() called")
         finally:
             time.sleep(0.5)
@@ -171,37 +204,3 @@ def upload_and_start_file_to_printer(
                     ftps.close()
                 except:
                     pass
-
-    
-
-
-
-def start_print_on_printer(
-    ip: str,
-    access_code: str,
-    serial: str,
-    filename: str,
-    plate_num: int = 1,
-) -> None:
-    """
-    Запуск печати через bambulabs_api (MQTT).
-
-    ip          - IP принтера
-    access_code - access code
-    serial      - серийный номер
-    filename    - имя файла на принтере (как лежит на SD, напр. "AI.gcode.3mf")
-    plate_num   - номер пластины (обычно 1)
-    """
-    print(f"[PRINT] Start {filename} on {ip} ({serial})")
-    printer = bl.Printer(ip, access_code, serial)
-    printer.mqtt_start()
-    try:
-        time.sleep(0.5)
-        state = printer.get_state()
-        print("[PRINT] State:", state)
-        printer.start_print(filename, plate_num)
-        print("[PRINT] start_print() called")
-    finally:
-        time.sleep(0.5)
-        printer.mqtt_stop()
-

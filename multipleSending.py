@@ -156,5 +156,4 @@ def upload_on_rack(yaml_f:str, file_path:str, row : int, rack : int):
 
 
 #Вызов метода
-
 upload_on_rack("printers.yaml","t1.gcode.3mf", 1, 2)
