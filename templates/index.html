@@ -9,13 +9,19 @@
   <h1>Print Farm Control</h1>
 
   <section class="job-panel">
-    <label>
-      Имя файла (из папки jobs/):
-      <input id="filename" type="text" placeholder="example.gcode.3mf">
-    </label>
-    <button id="start-btn">Запустить печать на выбранных</button>
-    <div id="status" class="status"></div>
-  </section>
+  <input id="file-input" type="file" style="display:none" />
+  <button id="choose-file-btn">Выбрать файл...</button>
+  <span id="chosen-file-name" style="margin-left:8px; font-size:0.9rem; color:#555;">
+    Файл не выбран
+  </span>
+
+  <button id="start-btn" style="margin-left:16px;">
+    Запустить печать на выбранных
+  </button>
+
+  <div id="status" class="status"></div>
+</section>
+
 
   <section class="grid-panel">
     <h2>Карта принтеров</h2>

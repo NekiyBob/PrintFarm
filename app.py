@@ -1,5 +1,6 @@
 import os
 import yaml
+import json
 from flask import Flask, jsonify, request, render_template
 from printer_client import ImplicitFTP_TLS, upload_file_to_printer, start_print_on_printer, upload_and_start_file_to_printer
 
@@ -35,47 +36,64 @@ def api_printers():
     return jsonify(PRINTERS)
 
 
-@app.post("/api/print")
-def api_print():
+@app.post("/api/upload_and_print")
+def api_upload_and_print():
     """
-    Запуск печати:
-    ожидает JSON: { "printers": ["R1-S1-L1-P1", ...], "filename": "job.3mf" }
+    Принимает multipart/form-data:
+      - file: бинарник (.3mf)
+      - printers: JSON-строка со списком id принтеров
     """
-    print('odfa')
-    data = request.get_json(silent=True) or {}
-    printer_ids = data.get("printers") or []
-    filename = data.get("filename")
+    if "file" not in request.files:
+        return jsonify({"error": "no file part"}), 400
 
-    if not printer_ids or not filename:
-        return jsonify({"error": "printers and filename required"}), 400
+    file = request.files["file"]
+    printers_json = request.form.get("printers", "[]")
 
-    # считаем, что файлы лежат в папке jobs/ рядом с app.py
-    local_path = os.path.join("jobs", filename)
-    if not os.path.isfile(local_path):
-        return jsonify({"error": f"file not found: {local_path}"}), 400
+    try:
+        printer_ids = json.loads(printers_json)
+    except json.JSONDecodeError:
+        return jsonify({"error": "printers is not valid JSON"}), 400
+
+    if not printer_ids:
+        return jsonify({"error": "no printers specified"}), 400
+
+    if file.filename == "":
+        return jsonify({"error": "empty filename"}), 400
+
+    # Сохраняем файл во временный путь в папке jobs/
+    os.makedirs("jobs", exist_ok=True)
+    safe_name = os.path.basename(file.filename)
+    temp_path = os.path.join("jobs", safe_name)
+    file.save(temp_path)
 
     results = []
+
     for pid in printer_ids:
         p = get_printer(pid)
         if not p:
             results.append({"printer": pid, "status": "not_found"})
             continue
+
         ip = p["ip"]
         serial = p["serial"]
         access_code = p["access_code"]
+
         if not ip or not serial or not access_code:
             results.append({"printer": pid, "status": "missing_config"})
             continue
 
         try:
-            # 1) загрузка .3mf на принтер
-            upload_file_to_printer(ip, "bblp", access_code, local_path)
-            # 2) запуск печати
-            start_print_on_printer(ip, access_code, serial,
-                                   os.path.basename(local_path), plate_num=1)
+            # 1) загрузка файла на принтер по FTP
+            upload_file_to_printer(ip, "bblp", access_code, temp_path)
+            # 2) запуск печати через MQTT/bambulabs_api
+            start_print_on_printer(ip, access_code, serial, safe_name, plate_num=1)
+
             results.append({"printer": pid, "status": "ok"})
         except Exception as e:
             results.append({"printer": pid, "status": "error", "message": str(e)})
+
+    # при желании можно удалить временный файл:
+    # os.remove(temp_path)
 
     return jsonify(results)
 

@@ -85,16 +85,27 @@ async function main() {
     statusEl.textContent = "Ошибка: " + e.message;
   }
 
+  const fileInput = document.getElementById("file-input");
+  const chooseFileBtn = document.getElementById("choose-file-btn");
+  const chosenFileNameSpan = document.getElementById("chosen-file-name");
   const startBtn = document.getElementById("start-btn");
-  const filenameInput = document.getElementById("filename");
+
+  // Кнопка "Выбрать файл..." открывает системный проводник
+  chooseFileBtn.addEventListener("click", () => {
+    fileInput.click();
+  });
+
+  // Когда пользователь выбрал файл, показываем его имя
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length > 0) {
+      const f = fileInput.files[0];
+      chosenFileNameSpan.textContent = f.name;
+    } else {
+      chosenFileNameSpan.textContent = "Файл не выбран";
+    }
+  });
 
   startBtn.addEventListener("click", async () => {
-    const filename = filenameInput.value.trim();
-    if (!filename) {
-      statusEl.textContent = "Укажите имя файла (из папки jobs/).";
-      return;
-    }
-
     const selectedButtons = Array.from(
       document.querySelectorAll(".printer-btn.selected")
     );
@@ -104,20 +115,24 @@ async function main() {
       return;
     }
 
-    const printerIds = selectedButtons.map(btn => btn.dataset.printerId);
+    if (!fileInput.files || fileInput.files.length === 0) {
+      statusEl.textContent = "Сначала выберите файл.";
+      return;
+    }
+
+    const printers = selectedButtons.map(btn => btn.dataset.printerId);
+    const file = fileInput.files[0];
 
     statusEl.textContent = "Отправляем задание...\n";
 
     try {
-      const resp = await fetch("/api/print", {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("printers", JSON.stringify(printers));
+
+      const resp = await fetch("/api/upload_and_print", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          printers: printerIds,
-          filename: filename,
-        }),
+        body: formData,
       });
 
       if (!resp.ok) {
