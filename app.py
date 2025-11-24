@@ -60,7 +60,6 @@ def api_print():
         if not p:
             results.append({"printer": pid, "status": "not_found"})
             continue
-
         ip = p["ip"]
         serial = p["serial"]
         access_code = p["access_code"]

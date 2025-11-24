@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Print Farm Control</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <h1>Print Farm Control</h1>
+
+  <section class="job-panel">
+    <label>
+      Имя файла (из папки jobs/):
+      <input id="filename" type="text" placeholder="example.gcode.3mf">
+    </label>
+    <button id="start-btn">Запустить печать на выбранных</button>
+    <div id="status" class="status"></div>
+  </section>
+
+  <section class="grid-panel">
+    <h2>Карта принтеров</h2>
+    <div id="grid"></div>
+  </section>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
