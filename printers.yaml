@@ -124,7 +124,7 @@ printers:
   rack: 2
   level: 1
   slot: 1
-  ip: 192.168.1.127
+  ip: 192.168.1.41
   serial: '00M09D530800975'
   access_code: 'b1562c9a'
   model: X1C
@@ -134,7 +134,7 @@ printers:
   rack: 2
   level: 1
   slot: 2
-  ip: 192.168.1.80
+  ip: 192.168.1.199
   serial: '00M09D530801018'
   access_code: '2b421199'
   model: X1C
@@ -144,7 +144,7 @@ printers:
   rack: 2
   level: 1
   slot: 3
-  ip: 192.168.1.121
+  ip: 192.168.1.79
   serial: '00M09D531400294'
   access_code: '8ddd82dc'
   model: X1C
@@ -154,7 +154,7 @@ printers:
   rack: 2
   level: 1
   slot: 4
-  ip: 192.168.1.79
+  ip: 192.168.1.39
   serial: '00M09D530502211'
   access_code: 'f4f3a83f'
   model: X1C
@@ -164,7 +164,7 @@ printers:
   rack: 2
   level: 1
   slot: 5
-  ip: 192.168.1.101
+  ip: 192.168.1.143
   serial: '00M09D530800471'
   access_code: 'abf5b5c8'
   model: X1C
@@ -174,7 +174,7 @@ printers:
   rack: 2
   level: 1
   slot: 6
-  ip: 192.168.1.151
+  ip: 192.168.1.65
   serial: '00M09D530800411'
   access_code: '0ed756ca'
   model: X1C
@@ -184,7 +184,7 @@ printers:
   rack: 2
   level: 2
   slot: 1
-  ip: 192.168.1.72
+  ip: 192.168.1.113
   serial: '00M09D530800842'
   access_code: '6be305cd'
   model: X1C
@@ -194,7 +194,7 @@ printers:
   rack: 2
   level: 2
   slot: 2
-  ip: 192.168.1.49
+  ip: 192.168.1.66
   serial: '00M09D530800745'
   access_code: '6d47c291'
   model: X1C
@@ -214,7 +214,7 @@ printers:
   rack: 2
   level: 2
   slot: 4
-  ip: 192.168.1.48
+  ip: 192.168.1.47
   serial: '00M09D530800462'
   access_code: 'af42a759'
   model: X1C
@@ -224,7 +224,7 @@ printers:
   rack: 2
   level: 2
   slot: 5
-  ip: 192.168.1.37
+  ip: 192.168.1.38
   serial: '00M09D530800730'
   access_code: 'c6fbb6e6'
   model: X1C
@@ -234,7 +234,7 @@ printers:
   rack: 2
   level: 2
   slot: 6
-  ip: 192.168.1.82
+  ip: 192.168.1.60
   serial: '00M09D530502275'
   access_code: '12ce42d0'
   model: X1C
@@ -244,241 +244,241 @@ printers:
   rack: 3
   level: 1
   slot: 1
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.62
+  serial: '00M09D530800678'
+  access_code: '62833dd4'
   model: X1C
-  name: ''
+  name: '(X1) 1.3'
 - id: R1-S3-L1-P2
   row: 1
   rack: 3
   level: 1
   slot: 2
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.114
+  serial: '00M09D530800994'
+  access_code: 'f93bec29'
   model: X1C
-  name: ''
+  name: '(X1) 1.2'
 - id: R1-S3-L1-P3
   row: 1
   rack: 3
   level: 1
   slot: 3
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.67
+  serial: '00M09D530801061'
+  access_code: 'cfb86bac'
   model: X1C
-  name: ''
+  name: '(X1)1.1'
 - id: R1-S3-L1-P4
   row: 1
   rack: 3
   level: 1
   slot: 4
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.189
+  serial: '00M09D530502252'
+  access_code: '0bdadc9b'
   model: X1C
-  name: ''
+  name: '2.3.3 (X1)'
 - id: R1-S3-L1-P5
   row: 1
   rack: 3
   level: 1
   slot: 5
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.116
+  serial: '00M09D530800846'
+  access_code: 'e3b0f0cd'
   model: X1C
-  name: ''
+  name: '2.3.2(X1)'
 - id: R1-S3-L1-P6
   row: 1
   rack: 3
   level: 1
   slot: 6
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.63
+  serial: '00M09D530801047'
+  access_code: '037ae787'
   model: X1C
-  name: ''
+  name: '2.3.1'
 - id: R1-S3-L2-P1
   row: 1
   rack: 3
   level: 2
   slot: 1
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.152
+  serial: '00M09D530800726'
+  access_code: '7f867fb1'
   model: X1C
-  name: ''
+  name: '(X1) 1.12 4'
 - id: R1-S3-L2-P2
   row: 1
   rack: 3
   level: 2
   slot: 2
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.89
+  serial: '00M09D4A2100020'
+  access_code: '46b595b7'
   model: X1C
-  name: ''
+  name: '2.3.12'
 - id: R1-S3-L2-P3
   row: 1
   rack: 3
   level: 2
   slot: 3
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.168
+  serial: '00M09D531400249'
+  access_code: '7db0208d'
   model: X1C
-  name: ''
+  name: '2.3.10 (X1)'
 - id: R1-S3-L2-P4
   row: 1
   rack: 3
   level: 2
   slot: 4
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.155
+  serial: '00M09D530800670'
+  access_code: '2738b0b7'
   model: X1C
-  name: ''
+  name: '2.3.9'
 - id: R1-S3-L2-P5
   row: 1
   rack: 3
   level: 2
   slot: 5
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.100
+  serial: '00M09A3A1700236'
+  access_code: '6d049f0c'
   model: X1C
-  name: ''
+  name: '(6)X1'
 - id: R1-S3-L2-P6
   row: 1
   rack: 3
   level: 2
   slot: 6
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.154
+  serial: '00M09D530801060'
+  access_code: '99ff9d89'
   model: X1C
-  name: ''
+  name: '2.3.7'
 - id: R1-S4-L1-P1
   row: 1
   rack: 4
   level: 1
   slot: 1
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.51
+  serial: '00M09C451702122'
+  access_code: '72641a08'
   model: X1C
-  name: ''
+  name: '122'
 - id: R1-S4-L1-P2
   row: 1
   rack: 4
   level: 1
   slot: 2
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.77
+  serial: '00M09C451701733'
+  access_code: 'd52a6869'
   model: X1C
-  name: ''
+  name: '733'
 - id: R1-S4-L1-P3
   row: 1
   rack: 4
   level: 1
   slot: 3
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.197
+  serial: '00M09D482803846'
+  access_code: '1ded9f9e'
   model: X1C
-  name: ''
+  name: '846'
 - id: R1-S4-L1-P4
   row: 1
   rack: 4
   level: 1
   slot: 4
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.150
+  serial: '00M09D461602444'
+  access_code: '15aa7fec'
   model: X1C
-  name: ''
+  name: '13'
 - id: R1-S4-L1-P5
   row: 1
   rack: 4
   level: 1
   slot: 5
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.118
+  serial: '00M09D461602563'
+  access_code: 'ce0f754e'
   model: X1C
-  name: ''
+  name: '12'
 - id: R1-S4-L1-P6
   row: 1
   rack: 4
   level: 1
   slot: 6
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.172
+  serial: '00M09D461602547'
+  access_code: '000d945b'
   model: X1C
-  name: ''
+  name: '11'
 - id: R1-S4-L2-P1
   row: 1
   rack: 4
   level: 2
   slot: 1
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.112
+  serial: '00M09C452700392'
+  access_code: '435acd9a'
   model: X1C
-  name: ''
+  name: '392'
 - id: R1-S4-L2-P2
   row: 1
   rack: 4
   level: 2
   slot: 2
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.184
+  serial: '00M09A3C2200751'
+  access_code: 'ae8c035a'
   model: X1C
-  name: ''
+  name: '751'
 - id: R1-S4-L2-P3
   row: 1
   rack: 4
   level: 2
   slot: 3
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.81
+  serial: '00M09A3C2200690'
+  access_code: '563b0c9b'
   model: X1C
-  name: ''
+  name: '690'
 - id: R1-S4-L2-P4
   row: 1
   rack: 4
   level: 2
   slot: 4
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.68
+  serial: '00M09A3C0100243'
+  access_code: '96270620'
   model: X1C
-  name: ''
+  name: '5'
 - id: R1-S4-L2-P5
   row: 1
   rack: 4
   level: 2
   slot: 5
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.195
+  serial: '00M09D530900007'
+  access_code: 'ac67f3e1'
   model: X1C
-  name: ''
+  name: '2.3.8'
 - id: R1-S4-L2-P6
   row: 1
   rack: 4
   level: 2
   slot: 6
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.153
+  serial: '00M09A3A1700267'
+  access_code: '4868cf88'
   model: X1C
-  name: ''
+  name: '7'
 - id: R1-S5-L1-P1
   row: 1
   rack: 5
@@ -1014,11 +1014,11 @@ printers:
   rack: 3
   level: 1
   slot: 6
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.132
+  serial: '00M09D461602386'
+  access_code: '241cf96e'
   model: X1C
-  name: ''
+  name: '(9) X1'
 - id: R2-S3-L2-P1
   row: 2
   rack: 3

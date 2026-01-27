@@ -2,46 +2,61 @@ import time
 import bambulabs_api as bl
 from io import BytesIO
 import time
+import yaml
 import zipfile
 import bambulabs_api as bl
 import os
+import printer_client
+import printer_lan
 
-IP = '192.168.1.130'
-SERIAL = '00M09D461602386'
-ACCESS_CODE = '241cf96e'
 
 if __name__ == '__main__':
-    print('Starting bambulabs_api example')
-    print('Connecting to Bambulabs 3D printer')
-    print(f'IP: {IP}')
-    print(f'Serial: {SERIAL}')
-    print(f'Access Code: {ACCESS_CODE}')
+    with open("printers.yaml", "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
 
-    # Create a new instance of the API
-    printer = bl.Printer(IP, ACCESS_CODE, SERIAL)
+    PRINTERS = cfg["printers"]
 
-    # Connect to the Bambulabs 3D printer without connecting to the camera
-    printer.mqtt_start()
 
-    time.sleep(2)
+    def get_printer(printer_id: str):
+        for p in PRINTERS:
+            if p["id"] == printer_id:
+                return p
+        return None
+    
 
-    # Get the printer status
-    status = printer.get_state()
-    print(f'Printer status: {status}')
-    print(printer.get_bed_temperature())
-    # with open(r"t1.gcode.3mf", "rb") as f:
-    #     a = printer.upload_file(f, 't1.gcode.3mf')
-    #     print(a)
+    #Нужный для отладки принтер 
+    p = get_printer("R1-S3-L1-P6")
+    IP = p["ip"]
+    SERIAL = p["serial"]
+    ACCESS_CODE = p["access_code"]
+    path = "jobs/t1.gcode.3mf"
 
-    #==================================================================PRINT FILE ===================================================
+    
 
-    printer.start_print("t1.gcode.3mf", 1)
+    
+    printer = printer_lan.Printer(ip=IP, access_code=ACCESS_CODE, serial=SERIAL)
+   
+    st = printer.getStatus()
+    print(st)
+   
+    
+    
+    
+   
+    
+    
     
 
 
-    time.sleep(2)
+
+   
+    
+    
+
+
+    time.sleep(3)
 
    
 
     # Disconnect the mqtt client
-    printer.mqtt_stop()
+    

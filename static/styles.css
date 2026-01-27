@@ -79,7 +79,39 @@ h1 {
 }
 
 .printer-btn.selected {
-  background: #4caf50 !important;
+  background: #2871c0 !important;
   color: white;
-  border-color: #388e3c !important;
+  border-color: #2871c0 !important;
+  border: 2px #2871c0;
+}
+.printer-btn {
+ 
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+/* статус: не удалось узнать */
+.printer-btn.st-offline {
+  background: #0b2a5a;   /* тёмно-синий */
+  color: #fff;
+  border-color: #082046;
+}
+
+/* статус: печатает */
+.printer-btn.st-running {
+  background: #22c55e;   /* зелёный */
+  color: #06210f;
+  border-color: #169c46;
+}
+
+/* статус: пауза */
+.printer-btn.st-pause {
+  background: #facc15;   /* жёлтый */
+  color: #2a2100;
+  border-color: #d0aa10;
+}
+
+/* чтобы выбранный принтер было видно поверх цветов */
+.printer-btn.selected {
+  outline: 3px solid #111;
+  outline-offset: 2px;
 }
