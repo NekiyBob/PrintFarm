@@ -1,0 +1,260 @@
+{
+  "R1-S2-L1-P3": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "1026 мотогондола 003.gcode.3mf",
+    "last_printed_ts": 1773409362.0698843
+  },
+  "R1-S2-L2-P3": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "1026 мотогондола 003.gcode.3mf",
+    "last_printed_ts": 1773410483.84499
+  },
+  "R1-S2-L2-P6": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "0826 003 X1.gcode.3mf",
+    "last_printed_ts": 1773391725.9138846
+  },
+  "R1-S2-L2-P4": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773391769.6224284
+  },
+  "R1-S2-L1-P1": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "1026 мотогондола 003.gcode.3mf",
+    "last_printed_ts": 1773409494.6996
+  },
+  "R1-S3-L1-P5": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773321587.459152
+  },
+  "R1-S3-L1-P3": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773391454.2272177
+  },
+  "R1-S3-L2-P1": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773321869.1929164
+  },
+  "R1-S3-L2-P5": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773321618.3898633
+  },
+  "R1-S3-L1-P4": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773321532.2984333
+  },
+  "R1-S2-L1-P6": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "Вертикальная стойка.gcode.3mf",
+    "last_printed_ts": 1773391453.3065972
+  },
+  "R1-S2-L1-P2": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773409392.387984
+  },
+  "R1-S2-L2-P1": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "1026 мотогондола 003.gcode.3mf",
+    "last_printed_ts": 1773391858.692934
+  },
+  "R1-S4-L1-P2": {
+    "last_gcode_state": "FINISH",
+    "last_started": "1026 мотогондола 003.gcode.3mf",
+    "last_started_ts": 1773316462.1422207,
+    "last_printed": "1026 мотогондола 003.gcode.3mf",
+    "last_printed_ts": 1773407529.2139668
+  },
+  "R1-S4-L1-P5": {
+    "last_gcode_state": "FAILED",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773321493.1399643,
+    "current_file": "project_file",
+    "current_ts": 1773391454.3468664
+  },
+  "R1-S4-L1-P6": {
+    "last_gcode_state": "FAILED",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773321398.6634407,
+    "current_file": "project_file",
+    "current_ts": 1773391454.4322653
+  },
+  "R1-S2-L2-P5": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "1026 мотогондола 003.gcode.3mf",
+    "last_printed_ts": 1773409279.1734698
+  },
+  "R1-S4-L1-P1": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "0826 003 X1.gcode.3mf",
+    "last_printed_ts": 1773321265.9154146
+  },
+  "R1-S3-L1-P1": {
+    "last_gcode_state": "FINISH"
+  },
+  "R1-S4-L2-P6": {
+    "last_gcode_state": "FINISH",
+    "current_file": "/data/Metadata/plate_1.gcode",
+    "current_ts": 1773298411.1720757
+  },
+  "R1-S2-L1-P4": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773410276.1148689
+  },
+  "R1-S3-L2-P2": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773391454.1498592
+  },
+  "R1-S3-L2-P3": {
+    "last_gcode_state": "FINISH"
+  },
+  "R2-S3-L1-P6": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773321509.8635116
+  },
+  "R1-S2-L2-P2": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "1026 мотогондола 003.gcode.3mf",
+    "last_printed_ts": 1773410472.1716375
+  },
+  "R1-S3-L1-P6": {
+    "last_gcode_state": "FAILED",
+    "current_file": "элевон.gcode.3mf",
+    "current_ts": 1773401781.8578613
+  },
+  "R1-S4-L2-P1": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "0826 003 X1.gcode.3mf",
+    "last_printed_ts": 1773407609.3191907
+  },
+  "R1-S2-L1-P5": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "поворотного_Л_V0.2",
+    "last_printed_ts": 1773308816.154212
+  },
+  "R1-S4-L2-P5": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773321424.1021516
+  },
+  "R1-S4-L2-P2": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "0826 003 X1.gcode.3mf",
+    "last_printed_ts": 1773407483.3887305
+  },
+  "R1-S3-L2-P4": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773391453.9316125
+  },
+  "R1-S4-L2-P3": {
+    "last_gcode_state": "FAILED",
+    "current_file": "0826 003 X1.gcode.3mf",
+    "current_ts": 1773298411.6952507
+  },
+  "R1-S4-L1-P4": {
+    "last_gcode_state": "FINISH",
+    "last_started": "1026 мотогондола 003.gcode.3mf",
+    "last_started_ts": 1773316458.2696586,
+    "last_printed": "1026 мотогондола 003.gcode.3mf",
+    "last_printed_ts": 1773408491.9635355
+  },
+  "R1-S4-L1-P3": {
+    "last_gcode_state": "FINISH",
+    "last_started": "1026 мотогондола 003.gcode.3mf",
+    "last_started_ts": 1773316464.2995126,
+    "last_printed": "1026 мотогондола 003.gcode.3mf",
+    "last_printed_ts": 1773407669.6296508
+  },
+  "R1-S3-L1-P2": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773321536.6625881
+  },
+  "R1-S4-L2-P4": {
+    "last_gcode_state": "FINISH"
+  },
+  "R1-S3-L2-P6": {
+    "last_gcode_state": "FAILED",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773316675.1252754,
+    "current_file": "project_file",
+    "current_ts": 1773320866.1515296
+  },
+  "R2-S1-L1-P2": {
+    "last_gcode_state": "RUNNING",
+    "current_file": "/data/Metadata/plate_1.gcode",
+    "current_ts": 1773408523.4370108
+  },
+  "R2-S1-L1-P5": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773406148.179303
+  },
+  "R2-S1-L2-P3": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773405975.2691703,
+    "current_file": "СТЕГ.741512.010 Упор толкателя задний (4)",
+    "current_ts": 1773408540.1046603
+  },
+  "R2-S1-L2-P6": {
+    "last_gcode_state": "FINISH"
+  },
+  "R2-S1-L2-P2": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773405918.0406113,
+    "current_file": "project_file",
+    "current_ts": 1773408428.2860575
+  },
+  "R2-S1-L1-P6": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773406007.1678286
+  },
+  "R2-S1-L2-P1": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773406024.8676903,
+    "current_file": "project_file",
+    "current_ts": 1773408432.535474
+  },
+  "R2-S1-L1-P3": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773405977.1166725,
+    "current_file": "СТЕГ.741512.010 Упор толкателя задний (4)",
+    "current_ts": 1773408553.2316468
+  },
+  "R2-S1-L1-P4": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773406008.146677
+  },
+  "R2-S1-L2-P4": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773406026.8535516
+  },
+  "R2-S1-L1-P1": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773405971.1171474,
+    "current_file": "/data/Metadata/plate_1.gcode",
+    "current_ts": 1773408478.680873
+  },
+  "R2-S1-L2-P5": {
+    "last_gcode_state": "FINISH"
+  }
+}
+}

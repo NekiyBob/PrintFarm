@@ -2,32 +2,91 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Print Farm Control</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
+
 <body>
-  <h1>Print Farm Control</h1>
+  <!-- Верхняя фиксированная панель -->
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <h1>Print Farm Control</h1>
+        <small>Загрузка, запуск и мониторинг 3D фермы</small>
+      </div>
 
-  <section class="job-panel">
-  <input id="file-input" type="file" style="display:none" />
-  <button id="choose-file-btn">Выбрать файл...</button>
-  <span id="chosen-file-name" style="margin-left:8px; font-size:0.9rem; color:#555;">
-    Файл не выбран
-  </span>
+      <div class="toolbar">
+        <input id="search" class="input" placeholder="Поиск: R1-S2 или часть ID..." />
+        <span class="badge" id="selected-count">Выбрано: 0</span>
+      </div>
+    </div>
+  </div>
 
-  <button id="start-btn" style="margin-left:16px;">
-    Запустить печать на выбранных
-  </button>
+  <div class="container">
+    <!-- Панель задач -->
+    <section class="card job-panel">
+      <div class="job-toolbar">
+        <div class="job-left">
+          <input id="file-input" type="file" style="display:none" />
 
-  <div id="status" class="status"></div>
-</section>
+          <button id="choose-file-btn" class="btn">
+            Выбрать файл…
+          </button>
 
+          <span id="chosen-file-name" class="file-name">Файл не выбран</span>
 
-  <section class="grid-panel">
-    <h2>Карта принтеров</h2>
-    <div id="grid"></div>
-  </section>
+          <button id="start-btn" class="btn btn-primary" style="margin-left: 10px;">
+            Запустить печать на выбранных
+          </button>
+        </div>
+
+        <div class="job-right">
+          <button id="restart-btn" class="btn btn-dark">
+            Перезапустить выбранных
+          </button>
+        </div>
+      </div>
+
+      <div id="status" class="status">Готово. Выберите принтеры и файл.</div>
+    </section>
+
+    <!-- Карта принтеров -->
+    <section class="card grid-panel">
+      <div class="grid-title">
+        <h2>Карта принтеров</h2>
+        <div class="grid-sub">
+          Клик по заголовку стеллажа — выбрать/снять все в стеллаже
+        </div>
+      </div>
+      <div id="grid"></div>
+    </section>
+  </div>
 
   <script src="{{ url_for('static', filename='app.js') }}"></script>
+
+  <!-- Плавающая кнопка -->
+  <button id="refresh-btn" class="refresh-btn">Обновить</button>
+
+  <!-- Небольшой UI-скрипт (не мешает твоему app.js) -->
+  <script>
+    // Счётчик выбранных принтеров (приятная мелочь)
+    function updateSelectedCount() {
+      const el = document.getElementById("selected-count");
+      if (!el) return;
+      const n = document.querySelectorAll(".printer-btn.selected").length;
+      el.textContent = "Выбрано: " + n;
+    }
+
+    document.addEventListener("click", (e) => {
+      if (e.target && e.target.classList && e.target.classList.contains("printer-btn")) {
+        updateSelectedCount();
+      }
+    });
+
+    // На случай, если выбор делается кликом по заголовку стеллажа (ты добавишь это в buildGrid)
+    document.addEventListener("selectionchange", updateSelectedCount);
+    setInterval(updateSelectedCount, 800);
+  </script>
 </body>
 </html>

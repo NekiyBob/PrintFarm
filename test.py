@@ -25,7 +25,7 @@ if __name__ == '__main__':
     
 
     #Нужный для отладки принтер 
-    p = get_printer("R1-S3-L1-P6")
+    p = get_printer("R1-S2-L2-P5")
     IP = p["ip"]
     SERIAL = p["serial"]
     ACCESS_CODE = p["access_code"]

@@ -84,7 +84,7 @@ class Printer:
 
     # -------------------- публичные методы --------------------
 
-    def getStatus(self, timeout: float = 5.0) -> Dict[str, Any]:
+    def getStatus(self, timeout: float = 10.0) -> Dict[str, Any]:
         """
         Возвращает последний report от принтера.
         Ждёт хотя бы один report (timeout секунд).
@@ -188,48 +188,91 @@ class Printer:
         self,
         filename_on_sd: str,
         plate_num: int = 1,
-        timeout: float = 10.0,
+        timeout: float = 25.0,
         bed_leveling: bool = False,
         flow_cali: bool = False,
-        ams_mapping: list[int] = [0],
+        ams_mapping: list[int] | None = None,
         vibration_cali: bool = False,
+        use_ams: bool = False,
     ) -> bool:
         """
-        Запускает печать файла, который УЖЕ лежит на SD (ты заливаешь через FTP).
-
-        Возвращает True, если увидели, что печать реально пошла (gcode_state RUNNING/PRINTING).
+        Запускает печать файла, который уже лежит на принтере.
+        - для .gcode: gcode_param
+        - для .gcode.3mf/.3mf: project_url
         """
         topic_request = f"device/{self.serial}/request"
-
         started_evt = threading.Event()
 
         def on_report(data: Dict[str, Any]):
-            pr = data.get("print", {})
+            pr = data.get("print", {}) or {}
             st = pr.get("gcode_state")
             if st and str(st).upper() in ("RUNNING", "PRINTING"):
                 started_evt.set()
 
+            # полезно видеть текст ошибки в консоли
+            err = pr.get("print_error") or pr.get("error") or pr.get("errmsg") or pr.get("err_msg")
+            if err:
+                print("[REPORT ERROR]", err)
+
         client, _ = self._mqtt_connect_and_listen(on_report)
 
         try:
-            cmd = {
-                "print": {
-                    "sequence_id": "0",
-                    "command": "project_file",
-                    "param": f"Metadata/plate_{plate_num}.gcode",
-                    "url": f"ftp:///{filename_on_sd}",
-                    "file": filename_on_sd,
-                    "bed_leveling": bed_leveling,
-                    "flow_cali": flow_cali,
-                    "vibration_cali": vibration_cali,
-                    "ams_mapping": list(ams_mapping),
-                    "use_ams": bool(False),
+            name = filename_on_sd
+            lower = name.lower()
+
+            # =========================
+            # 1) Обычный .gcode
+            # =========================
+            if lower.endswith(".gcode") or lower.endswith(".gcode.gz"):
+                # 🔧 МЕНЯЙ ВРУЧНУЮ ТОЛЬКО ЭТУ СТРОКУ:
+                gcode_param = f"/{name}"
+                # варианты для ручной подстановки:
+                # gcode_param = f"/sdcard/{name}"
+                # gcode_param = f"/cache/{name}"
+
+                cmd = {
+                    "print": {
+                        "sequence_id": "1",
+                        "command": "gcode_file",
+                        "param": gcode_param,
+                    }
                 }
+
+                print("[MQTT SEND]", cmd)
+                info = client.publish(topic_request, json.dumps(cmd), qos=1)
+                info.wait_for_publish()
+                return started_evt.wait(timeout)
+
+            # =========================
+            # 2) .gcode.3mf / .3mf (с gcode внутри)
+            project_url = f"file:///sdcard/{name}"
+
+            base_print = {
+                "sequence_id": "1",
+                "command": "project_file",
+                "param": f"Metadata/plate_{plate_num}.gcode",
+                "url": project_url,
+                "file": name,
+                "subtask_name": name,
+                "project_id": "0",
+                "profile_id": "0",
+                "task_id": "0",
+                "subtask_id": "0",
+                "bed_leveling": bed_leveling,
+                "flow_cali": flow_cali,
+                "vibration_cali": vibration_cali,
+                "use_ams": False,
+                "ams_mapping": [254],
             }
 
-            info = client.publish(topic_request, json.dumps(cmd), qos=0)
-            info.wait_for_publish()
+            # if use_ams:
+            #     base_print["ams_mapping"] = list(ams_mapping or [0])
 
+            cmd = {"print": base_print}
+
+            print("[MQTT SEND]", cmd)
+            info = client.publish(topic_request, json.dumps(cmd), qos=1)
+            info.wait_for_publish()
             return started_evt.wait(timeout)
 
         finally:
@@ -241,10 +284,10 @@ class Printer:
 if __name__ == "__main__":
     p = Printer("192.168.1.130", "00M09D461602386", "241cf96e")
 
-    print("STATUS:", p.status())
+    print("STATUS:", p.getStatus())
     print("START:", p.start_print("AI.gcode.3mf", plate_num=1))
     time.sleep(5)
     print("PAUSE:", p.pause())
     time.sleep(3)
     print("STOP:", p.stop())
-    print("STATUS:", p.status())
+    print("STATUS:", p.getStatus())

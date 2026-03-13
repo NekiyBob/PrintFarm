@@ -38,6 +38,17 @@ class ImplicitFTP_TLS(ftplib.FTP_TLS):
         if self._prot_p:  # если установлен защищенный режим для данных
             # Оборачиваем data-socket в TLS, используя ту же сессию, что и у контрол-сокета
             conn = self.context.wrap_socket(conn, server_hostname=self.host, session=self.sock.session)
+        # ускорение
+        try:
+            conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except Exception:
+            pass
+        try:
+            conn.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
+        except Exception:
+            pass
+        
+        conn.settimeout(180)
         return conn, size
 
 
@@ -51,10 +62,26 @@ def start_print_on_printer(
     filename: str,
     plate_num: int = 1,
 ) -> None:
-    
-    print(f"[PRINT] Start {filename} on {ip} ({serial})")
+    print(f"[PRINT] Start {filename} on {ip} ({serial}) plate={plate_num}")
     printer = printer_lan.Printer(ip=ip, serial=serial, access_code=access_code)
-    printer.start_print(filename_on_sd=filename)
+    
+    ok = printer.start_print(filename_on_sd=filename, plate_num=plate_num, timeout=45)
+    if not ok:
+        # Fallback: подождать чуть-чуть и спросить статус 1-2 раза
+        time.sleep(2.0)
+        st = printer.getStatus(timeout=6.0)
+
+        # Попробуем вытащить причину
+        pr = st.get("print") or {}
+        gcode_state = pr.get("gcode_state")
+        err = pr.get("print_error") or pr.get("err") or pr.get("fail_reason")
+
+        if err:
+            raise RuntimeError(f"start_print not confirmed, state={gcode_state}, err={err}")
+        else:
+            raise RuntimeError(f"start_print not confirmed, state={gcode_state}")
+
+
 
 
 
@@ -64,14 +91,16 @@ def upload_file_to_printer(
     local_path: str,
     remote_dir: str = "/",
     user: str = "bblp",
-    blocksize=32 * 1024,
+    blocksize=256 * 1024,
 ):
     ftps = None
     try:
         ftps = ImplicitFTP_TLS()
-        ftps.connect(host=host, port=990, timeout=10)
+        ftps.connect(host=host, port=990, timeout=20)
         ftps.login(user=user, passwd=password)
         ftps.prot_p()
+        ftps.sock.settimeout(180)  # контрольный канал тоже держим подольше
+
 
         if remote_dir:
             ftps.cwd(remote_dir)
@@ -88,9 +117,10 @@ def upload_file_to_printer(
             nonlocal bytes_sent, last_update
             bytes_sent += len(block)
             now = time.time()
-            if now - last_update > 0.3:
+            if now - last_update > 3:
                 percent = bytes_sent / filesize * 100
-                print(f"\rПрогресс: {percent:6.2f}%", end="")
+                print(f"\n[{host}] Прогресс: {percent:6.2f}%\n", flush=True)
+
                 last_update = now
 
         # Важно: таймауты лучше больше

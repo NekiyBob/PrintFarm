@@ -724,121 +724,121 @@ printers:
   rack: 1
   level: 1
   slot: 1
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.167
+  serial: '00M09D471802396'
+  access_code: '9bba1a20'
   model: X1C
-  name: ''
+  name: '6.1'
 - id: R2-S1-L1-P2
   row: 2
   rack: 1
   level: 1
   slot: 2
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.127
+  serial: '00M09D4A1101382'
+  access_code: 'b58a661b'
   model: X1C
-  name: ''
+  name: '6.2'
 - id: R2-S1-L1-P3
   row: 2
   rack: 1
   level: 1
   slot: 3
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.120
+  serial: '00M09D492100477'
+  access_code: '39fbef0e'
   model: X1C
-  name: ''
+  name: '6.3'
 - id: R2-S1-L1-P4
   row: 2
   rack: 1
   level: 1
   slot: 4
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.159
+  serial: '00M09D4C0301496'
+  access_code: '6e0f3c20'
   model: X1C
-  name: ''
+  name: '6.4'
 - id: R2-S1-L1-P5
   row: 2
   rack: 1
   level: 1
   slot: 5
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.75
+  serial: '00M09D510900181'
+  access_code: 'b877ae6e'
   model: X1C
-  name: ''
+  name: '6.5'
 - id: R2-S1-L1-P6
   row: 2
   rack: 1
   level: 1
   slot: 6
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.151
+  serial: '00M09D510900868'
+  access_code: '5eef7d26'
   model: X1C
-  name: ''
+  name: '6.6'
 - id: R2-S1-L2-P1
   row: 2
   rack: 1
   level: 2
   slot: 1
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.69
+  serial: '00M09D510901189'
+  access_code: '75c643d7'
   model: X1C
-  name: ''
+  name: '6.7'
 - id: R2-S1-L2-P2
   row: 2
   rack: 1
   level: 2
   slot: 2
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.161
+  serial: '00M09D492101115'
+  access_code: 'c19b3765'
   model: X1C
-  name: ''
+  name: '6.8'
 - id: R2-S1-L2-P3
   row: 2
   rack: 1
   level: 2
   slot: 3
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.82
+  serial: '00M09D480902701'
+  access_code: '3ab1a26e'
   model: X1C
-  name: ''
+  name: '6.9'
 - id: R2-S1-L2-P4
   row: 2
   rack: 1
   level: 2
   slot: 4
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.128
+  serial: '00M09D492101346'
+  access_code: 'bce112e2'
   model: X1C
-  name: ''
+  name: '6.10'
 - id: R2-S1-L2-P5
   row: 2
   rack: 1
   level: 2
   slot: 5
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.115
+  serial: '00M09D510901181'
+  access_code: '74f8b004'
   model: X1C
-  name: ''
+  name: '6.11'
 - id: R2-S1-L2-P6
   row: 2
   rack: 1
   level: 2
   slot: 6
-  ip: 192.168.1.
-  serial: ''
-  access_code: ''
+  ip: 192.168.1.61
+  serial: '00M09D510900989'
+  access_code: 'a9edbed8'
   model: X1C
-  name: ''
+  name: '6.12'
 - id: R2-S2-L1-P1
   row: 2
   rack: 2
@@ -1014,7 +1014,7 @@ printers:
   rack: 3
   level: 1
   slot: 6
-  ip: 192.168.1.132
+  ip: 192.168.1.50
   serial: '00M09D461602386'
   access_code: '241cf96e'
   model: X1C

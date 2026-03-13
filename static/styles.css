@@ -1,117 +1,297 @@
+:root {
+  --bg: #f6f7fb;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --shadow: 0 10px 25px rgba(2, 6, 23, 0.08);
+
+  --primary: #2563eb;
+  --primary-2: #1d4ed8;
+
+  --offline: #0b2a5a;
+  --running: #22c55e;
+  --pause: #facc15;
+
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; }
+
 body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  margin: 20px;
-  background: #f5f5f5;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
 }
 
 h1 {
-  margin-bottom: 10px;
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: 0.2px;
+}
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 18px 18px 90px;
+}
+
+/* ---------- Верхняя панель ---------- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: rgba(246, 247, 251, 0.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brand small {
+  color: var(--muted);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ---------- Карточки ---------- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 .job-panel {
-  background: #ffffff;
-  padding: 12px 16px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-}
-
-.job-panel input {
-  margin-left: 8px;
-  padding: 4px 8px;
-}
-
-.job-panel button {
-  margin-left: 12px;
-  padding: 6px 12px;
-  cursor: pointer;
-}
-
-.status {
-  margin-top: 10px;
-  font-size: 0.9rem;
-  white-space: pre-line;
+  padding: 14px 16px;
+  margin: 18px 0;
 }
 
 .grid-panel {
-  background: #ffffff;
-  padding: 12px 16px;
-  border-radius: 8px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  padding: 16px;
 }
 
+/* ---------- Инпуты/кнопки ---------- */
+.btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  border-radius: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: transform 0.06s ease, filter 0.2s ease, border-color 0.2s ease;
+  user-select: none;
+}
+
+.btn:hover { filter: brightness(0.98); border-color: #cbd5e1; }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--primary-2); border-color: var(--primary-2); }
+
+.btn-dark {
+  background: #0f172a;
+  color: #fff;
+  border-color: #0b1220;
+}
+
+.input {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 10px;
+  min-width: 220px;
+  outline: none;
+}
+.input:focus {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 4px rgba(59,130,246,0.15);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* ---------- Статус блок ---------- */
+.status {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px dashed #e2e8f0;
+  color: #0f172a;
+  font-size: 13px;
+  white-space: pre-line;
+}
+
+/* ---------- Карта / стеллажи ---------- */
+.grid-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.grid-title h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.grid-sub {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* вместо flex -> перенос красивее */
 .rack-row {
   display: flex;
-  margin-bottom: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
 }
 
 .rack {
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  margin-right: 12px;
-  padding: 6px;
-  background: #fafafa;
-  min-width: 160px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px;
+  min-width: 190px;
+  box-shadow: 0 6px 18px rgba(2, 6, 23, 0.06);
 }
 
 .rack-title {
-  font-size: 0.85rem;
-  font-weight: bold;
-  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rack-title .meta {
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 12px;
 }
 
 .level {
-  display: flex;
-  justify-content: space-between;
-  margin: 2px 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr); /* L1 | L2 */
+  gap: 6px;
+  margin: 6px 0;
 }
 
+/* Кнопки принтеров */
 .printer-btn {
-  flex: 1;
-  margin: 2px;
-  padding: 4px 2px;
-  font-size: 0.7rem;
-  text-align: center;
+  padding: 7px 6px;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #f1f5f9;
+  color: #0f172a;
   cursor: pointer;
-  border-radius: 4px;
-  border: 1px solid #ddd;
-  background: #eee;
+  transition: transform 0.05s ease, filter 0.2s ease, border-color 0.2s ease;
+  user-select: none;
+  font-weight: 700;
 }
 
+.printer-btn:hover {
+  filter: brightness(0.98);
+  border-color: #cbd5e1;
+}
+
+.printer-btn:active { transform: translateY(1px); }
+
+.printer-btn:disabled {
+  background: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+/* выделение */
 .printer-btn.selected {
-  background: #2871c0 !important;
-  color: white;
-  border-color: #2871c0 !important;
-  border: 2px #2871c0;
-}
-.printer-btn {
- 
-  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  outline: 3px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 1px;
+  border-color: rgba(37, 99, 235, 0.65);
 }
 
-/* статус: не удалось узнать */
+/* Статусы */
 .printer-btn.st-offline {
-  background: #0b2a5a;   /* тёмно-синий */
+  background: var(--offline);
   color: #fff;
-  border-color: #082046;
+  border-color: rgba(255,255,255,0.15);
 }
 
-/* статус: печатает */
 .printer-btn.st-running {
-  background: #22c55e;   /* зелёный */
+  background: var(--running);
   color: #06210f;
-  border-color: #169c46;
+  border-color: rgba(0,0,0,0.08);
 }
 
-/* статус: пауза */
 .printer-btn.st-pause {
-  background: #facc15;   /* жёлтый */
+  background: var(--pause);
   color: #2a2100;
-  border-color: #d0aa10;
+  border-color: rgba(0,0,0,0.10);
+}
+/* статус: ошибка */
+.printer-btn.st-error {
+  background: #ef4444;   /* красный */
+  color: #fff;
+  border-color: #b91c1c;
 }
 
-/* чтобы выбранный принтер было видно поверх цветов */
-.printer-btn.selected {
-  outline: 3px solid #111;
-  outline-offset: 2px;
+
+/* ---------- Плавающая кнопка обновления ---------- */
+.refresh-btn {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 9999;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 10px 25px rgba(2,6,23,0.12);
+  font-weight: 800;
 }
+
+.refresh-btn:hover { filter: brightness(0.98); }
+.refresh-btn:disabled { opacity: 0.6; cursor: not-allowed; }

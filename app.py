@@ -8,9 +8,21 @@ import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import uuid
+from mqtt_manager import MqttStatusManager, PrinterCfg
+from printer_history import PrinterHistory
+import random
 
+
+UPLOAD_CONCURRENCY = 3  # попробуй 2..4
+UPLOAD_SEM = threading.Semaphore(UPLOAD_CONCURRENCY)
+RESTART_CONCURRENCY = 3   # попробуй 2..4
+RESTART_SEM = threading.Semaphore(RESTART_CONCURRENCY)
+
+
+HISTORY = PrinterHistory("printer_history.json")
 JOBS = {}  # job_id -> dict(progress...)
 JOBS_LOCK = threading.Lock()
+MQTT_MANAGER = None
 
 
 # ---------- ЗАГРУЗКА КОНФИГА ПРИНТЕРОВ ----------
@@ -29,63 +41,6 @@ def get_printer(printer_id: str):
 
 STATUS_CACHE = {}   # printer_id -> {ok, gcode_state, ts, error}
 STATUS_LOCK = threading.Lock()
-
-
-def _poll_one(printer_cfg: dict) -> dict:
-    pid = printer_cfg["id"]
-    ip = printer_cfg.get("ip") or ""
-    serial = printer_cfg.get("serial") or ""
-    access_code = printer_cfg.get("access_code") or ""
-
-    if not ip or not serial or not access_code:
-        return {"id": pid, "ok": False, "gcode_state": None, "error": "missing_config", "ts": time.time()}
-
-    try:
-        p = Printer(ip, serial, access_code)
-        st = p.getStatus()  # st — dict
-
-        # если status() вернул ok=False
-        if not st.get("ok", False):
-            return {
-                "id": pid,
-                "ok": False,
-                "gcode_state": None,
-                "error": st.get("error", "no_report"),
-                "ts": time.time(),
-            }
-
-        gcode_state = st["gcode_state"]  
-
-        return {"id": pid, "ok": True, "gcode_state": gcode_state, "error": None, "ts": time.time()}
-
-    except KeyError:
-        # если в st нет ключа 'gcode_state'
-        return {"id": pid, "ok": False, "gcode_state": None, "error": "no_gcode_state", "ts": time.time()}
-
-    except Exception as e:
-        return {"id": pid, "ok": False, "gcode_state": None, "error": str(e), "ts": time.time()}
-
-
-def refresh_all_statuses():
-    # Параллельно, иначе 90 принтеров будут очень долго
-    results = []
-    with ThreadPoolExecutor(max_workers=15) as ex:
-        futs = [ex.submit(_poll_one, p) for p in PRINTERS]
-        for f in as_completed(futs):
-            results.append(f.result())
-
-    with STATUS_LOCK:
-        for r in results:
-            STATUS_CACHE[r["id"]] = r
-
-
-def status_poller_loop(interval_sec: int = 60):
-    while True:
-        try:
-            refresh_all_statuses()
-        except Exception:
-            pass
-        time.sleep(interval_sec)
 
 
 def _job_set(job_id, pid, **kwargs):
@@ -128,6 +83,8 @@ def retry(fn, tries=3, base_delay=1.0, factor=2.0, on_retry=None):
             if attempt == tries:
                 raise
             delay = base_delay * (factor ** (attempt - 1))
+            delay += random.uniform(0, 0.35 * delay)  # джиттер 0..35%
+
             if on_retry:
                 on_retry(attempt, e, delay)
             time.sleep(delay)
@@ -147,13 +104,19 @@ def _process_one_printer(job_id: str, pid: str, p: dict, temp_path: str, safe_na
     try:
         # 1) UPLOAD
         _job_set(job_id, pid, stage="uploading", message=None)
+
+        def do_upload():
+            with UPLOAD_SEM:
+                return upload_file_to_printer(ip, access_code, temp_path)
+
         retry(
-            lambda: upload_file_to_printer(ip, access_code, temp_path),
-            tries=3,
+            do_upload,
+            tries=3, # Количество одновременных загрузок
             base_delay=1.0,
             factor=2.0,
             on_retry=log_retry("uploading"),
         )
+
 
         _job_set(job_id, pid, stage="uploaded", message=None)
         time.sleep(1.5)
@@ -168,11 +131,85 @@ def _process_one_printer(job_id: str, pid: str, p: dict, temp_path: str, safe_na
             on_retry=log_retry("starting"),
         )
 
+        HISTORY.set_started(pid, safe_name)
+
         _job_set(job_id, pid, stage="started", message=None)
         _job_done(job_id, pid, ok=True)
 
     except Exception as e:
         _job_done(job_id, pid, ok=False, message=str(e))
+
+def _restart_one_printer(job_id: str, pid: str, p: dict):
+    ip = p["ip"]
+    serial = p["serial"]
+    access_code = p["access_code"]
+
+    last_file = HISTORY.get_last_printed(pid)
+    if not last_file:
+        _job_set(job_id, pid, stage="error", message="no_last_printed")
+        _job_done(job_id, pid, ok=False, message="no_last_printed")
+        return
+
+    def log_retry(stage):
+        def _cb(attempt, exc, delay):
+            _job_set(job_id, pid, stage=stage, message=f"retry {attempt}: {exc} (sleep {delay:.1f}s)")
+        return _cb
+
+    try:
+        _job_set(job_id, pid, stage="starting", file=last_file, message=None)
+
+        def do_start():
+            with RESTART_SEM:
+                return start_print_on_printer(ip, access_code, serial, last_file)
+
+        retry(
+            do_start,
+            tries=3,
+            base_delay=1.0,
+            factor=2.0,
+            on_retry=log_retry("starting"),
+        )
+
+
+        # считаем, что этот файл стал "последним запущенным" у нас
+        HISTORY.set_started(pid, last_file)
+
+        _job_set(job_id, pid, stage="started", file=last_file, message=None)
+        _job_done(job_id, pid, ok=True)
+
+    except Exception as e:
+        _job_done(job_id, pid, ok=False, message=str(e))
+
+
+def _run_restart_job(job_id: str, printer_ids: list, max_workers: int = 20):
+    valid = []
+
+    for pid in printer_ids:
+        p = get_printer(pid)
+        if not p:
+            _job_set(job_id, pid, stage="not_found", message=None)
+            _job_done(job_id, pid, ok=False, message="not_found")
+            continue
+
+        ip = p.get("ip")
+        serial = p.get("serial")
+        access_code = p.get("access_code")
+        if not ip or not serial or not access_code:
+            _job_set(job_id, pid, stage="missing_config", message=None)
+            _job_done(job_id, pid, ok=False, message="missing_config")
+            continue
+
+        _job_set(job_id, pid, stage="queued", message=None)
+        valid.append((pid, p))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        fut_map = {ex.submit(_restart_one_printer, job_id, pid, p): pid for pid, p in valid}
+        for fut in as_completed(fut_map):
+            try:
+                fut.result()
+            except Exception as e:
+                pid = fut_map[fut]
+                _job_done(job_id, pid, ok=False, message=f"worker crash: {e}")
 
 
 def _run_job(job_id: str, printer_ids: list, temp_path: str, safe_name: str, max_workers: int = 12):
@@ -212,25 +249,70 @@ def _run_job(job_id: str, printer_ids: list, temp_path: str, safe_name: str, max
                 pid = fut_map[fut]
                 _job_done(job_id, pid, ok=False, message=f"worker crash: {e}")
 
+
+def _on_status(pid: str, st: dict):
+    with STATUS_LOCK:
+        STATUS_CACHE[pid] = st
+
+    
+    HISTORY.note_report(
+        pid=pid,
+        ok=st.get("ok"),
+        gcode_state=st.get("gcode_state"),
+        file_hint=st.get("file")  # если поля нет — будет None
+    )
+
+
+
+
+
 # ---------- СОЗДАЁМ FLASK ПРИЛОЖЕНИЕ ----------
 app = Flask(__name__)
 
-
-def start_status_poller():
-    t = threading.Thread(target=status_poller_loop, kwargs={"interval_sec": 10}, daemon=True)
-    t.start()
-
 # после создания app = Flask(...)
+def start_mqtt_manager():
+    global MQTT_MANAGER
+    printer_cfgs = []
+    for p in PRINTERS:
+        printer_cfgs.append(
+            PrinterCfg(
+                id=p["id"],
+                ip=p.get("ip") or "",
+                serial=p.get("serial") or "",
+                access_code=p.get("access_code") or "",
+            )
+        )
+
+    MQTT_MANAGER = MqttStatusManager(
+        printers=printer_cfgs,
+        on_status=_on_status,
+        offline_after_sec=50.0,     # Через сколько сек без новых репортов принтер считается выкл.
+        monitor_interval_sec=2.0,   # Как часто менеджер проверяет выкл ли кто-то.
+        keepalive=60,               # Держит mqtt tcp открытым (пингует раз в 60 сек)
+    )
+    MQTT_MANAGER.start()
+
+
+# ВАЖНО: чтобы debug-reloader не запускал два раза
 if not app.debug or (app.debug and os.environ.get("WERKZEUG_RUN_MAIN") == "true"):
-    start_status_poller()
+    start_mqtt_manager()
+
 
     
 @app.get("/api/status")
 def api_status():
-    # Отдаём то, что есть в кэше; если принтера нет в кэше — будет NONE на фронте
     with STATUS_LOCK:
-        statuses = list(STATUS_CACHE.values())
-    return jsonify({"statuses": statuses})
+        cache = dict(STATUS_CACHE)
+    # добавим last_printed на каждый принтер
+    out = []
+    for p in PRINTERS:
+        pid = p["id"]
+        st = cache.get(pid, {"id": pid, "ok": None, "gcode_state": "NONE"})
+        st = dict(st)
+        st["last_printed"] = HISTORY.get_last_printed(pid)
+        out.append(st)
+    return jsonify({"statuses": out})
+
 
 
 @app.get("/api/jobs/<job_id>")
@@ -240,7 +322,6 @@ def api_job_status(job_id):
         if not job:
             return jsonify({"error": "job_not_found"}), 404
         return jsonify(job)
-
 
 
 
@@ -300,6 +381,49 @@ def api_upload_and_print():
 
     return jsonify({"job_id": job_id})
 
+@app.post("/api/restart_last_printed")
+def api_restart_last_printed():
+    data = request.get_json(silent=True) or {}
+    printer_ids = data.get("printers", [])
+
+    if not printer_ids:
+        return jsonify({"error": "no printers specified"}), 400
+
+    job_id = uuid.uuid4().hex
+
+    with JOBS_LOCK:
+        JOBS[job_id] = {
+            "job_id": job_id,
+            "filename": "(restart last printed)",
+            "created_ts": time.time(),
+            "total": len(printer_ids),
+            "done": 0,
+            "ok_count": 0,
+            "err_count": 0,
+            "finished": False,
+            "printers": {pid: {"stage": "queued"} for pid in printer_ids},
+        }
+
+    t = threading.Thread(target=_run_restart_job, args=(job_id, printer_ids), daemon=True)
+    t.start()
+    return jsonify({"job_id": job_id})
+
+@app.post("/api/mqtt/restart")
+def api_mqtt_restart():
+    global MQTT_MANAGER
+
+    if MQTT_MANAGER is None:
+        return jsonify({"error": "mqtt_manager_not_initialized"}), 500
+
+    # (опционально) очистим статусы, чтобы UI не показывал старое
+    with STATUS_LOCK:
+        STATUS_CACHE.clear()
+
+    try:
+        MQTT_MANAGER.restart()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 if __name__ == "__main__":
