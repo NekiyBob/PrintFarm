@@ -30,7 +30,6 @@ class PrinterHistory:
             with open(self.path, "r", encoding="utf-8") as f:
                 self._data = json.load(f) or {}
         except Exception:
-            # если файл битый — не падаем
             self._data = {}
 
     def _atomic_save(self) -> None:
@@ -46,6 +45,11 @@ class PrinterHistory:
     def get_last_printed(self, pid: str) -> Optional[str]:
         with self._lock:
             return (self._data.get(pid) or {}).get("last_printed")
+
+    def get_last_printed_ts(self, pid: str) -> Optional[float]:
+        with self._lock:
+            value = (self._data.get(pid) or {}).get("last_printed_ts")
+            return float(value) if value is not None else None
 
     def set_started(self, pid: str, filename: str) -> None:
         now = time.time()
@@ -76,8 +80,8 @@ class PrinterHistory:
             prev = (rec.get("last_gcode_state") or "").upper()
             rec["last_gcode_state"] = st
 
-            # если принтер печатает, а мы не знаем current_file (например, после перезапуска),
-            # пробуем хотя бы сохранить file_hint (часто это /data/Metadata/plate_1.gcode)
+            # если принтер печатает, а мы не знаем current_file,
+            # пробуем хотя бы сохранить file_hint (н это /data/Metadata/plate_1.gcode)
             if st in ("RUNNING", "PRINTING") and not rec.get("current_file") and file_hint:
                 rec["current_file"] = file_hint
                 rec["current_ts"] = now
@@ -95,5 +99,5 @@ class PrinterHistory:
                 rec.pop("current_file", None)
                 rec.pop("current_ts", None)
 
-                # ВАЖНО: сохраняем на диск только на FINISH/IDLE-переходе
+                #сохраняем на диск только на FINISH/IDLE-переходе
                 self._atomic_save()

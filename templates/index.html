@@ -8,7 +8,6 @@
 </head>
 
 <body>
-  <!-- Верхняя фиксированная панель -->
   <div class="topbar">
     <div class="topbar-inner">
       <div class="brand">
@@ -18,26 +17,30 @@
 
       <div class="toolbar">
         <input id="search" class="input" placeholder="Поиск: R1-S2 или часть ID..." />
+        <button id="select-mode-btn" class="btn">Выбрать</button>
         <span class="badge" id="selected-count">Выбрано: 0</span>
       </div>
     </div>
   </div>
 
   <div class="container">
-    <!-- Панель задач -->
     <section class="card job-panel">
       <div class="job-toolbar">
         <div class="job-left">
           <input id="file-input" type="file" style="display:none" />
 
           <button id="choose-file-btn" class="btn">
-            Выбрать файл…
+            Выбрать файл...
           </button>
 
           <span id="chosen-file-name" class="file-name">Файл не выбран</span>
 
           <button id="start-btn" class="btn btn-primary" style="margin-left: 10px;">
             Запустить печать на выбранных
+          </button>
+
+          <button id="upload-btn" class="btn" style="margin-left: 10px;">
+            Загрузить на SD
           </button>
         </div>
 
@@ -48,29 +51,39 @@
         </div>
       </div>
 
-      <div id="status" class="status">Готово. Выберите принтеры и файл.</div>
+      <div id="status" class="status">Готово. Включите режим выбора, если хотите отмечать принтеры для действий.</div>
     </section>
 
-    <!-- Карта принтеров -->
     <section class="card grid-panel">
       <div class="grid-title">
         <h2>Карта принтеров</h2>
-        <div class="grid-sub">
-          Клик по заголовку стеллажа — выбрать/снять все в стеллаже
+        <div class="grid-sub" id="grid-hint">
+          Обычный клик открывает информацию о принтере. Режим "Выбрать" включает множественный выбор.
         </div>
       </div>
       <div id="grid"></div>
     </section>
   </div>
 
+  <div id="drawer-backdrop" class="drawer-backdrop"></div>
+  <aside id="details-drawer" class="details-drawer" aria-hidden="true">
+    <div class="drawer-head">
+      <div>
+        <div class="drawer-eyebrow">Принтер</div>
+        <h3 id="drawer-title">Детали</h3>
+      </div>
+      <button id="drawer-close-btn" class="btn">Закрыть</button>
+    </div>
+    <div id="drawer-content" class="drawer-content">
+      Выберите принтер на карте, чтобы посмотреть детали.
+    </div>
+  </aside>
+
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 
-  <!-- Плавающая кнопка -->
   <button id="refresh-btn" class="refresh-btn">Обновить</button>
 
-  <!-- Небольшой UI-скрипт (не мешает твоему app.js) -->
   <script>
-    // Счётчик выбранных принтеров (приятная мелочь)
     function updateSelectedCount() {
       const el = document.getElementById("selected-count");
       if (!el) return;
@@ -84,8 +97,6 @@
       }
     });
 
-    // На случай, если выбор делается кликом по заголовку стеллажа (ты добавишь это в buildGrid)
-    document.addEventListener("selectionchange", updateSelectedCount);
     setInterval(updateSelectedCount, 800);
   </script>
 </body>

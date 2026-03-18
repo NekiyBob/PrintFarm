@@ -1,260 +1,583 @@
 {
   "R1-S2-L1-P3": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "1026 мотогондола 003.gcode.3mf",
-    "last_printed_ts": 1773409362.0698843
-  },
-  "R1-S2-L2-P3": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "1026 мотогондола 003.gcode.3mf",
-    "last_printed_ts": 1773410483.84499
-  },
-  "R1-S2-L2-P6": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "0826 003 X1.gcode.3mf",
-    "last_printed_ts": 1773391725.9138846
-  },
-  "R1-S2-L2-P4": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "/data/Metadata/plate_1.gcode",
-    "last_printed_ts": 1773391769.6224284
+    "last_gcode_state": "RUNNING",
+    "last_started": "1226_X1.gcode.3mf",
+    "last_started_ts": 1773842101.0698574,
+    "last_printed": "1226_X1.gcode.3mf",
+    "last_printed_ts": 1773837986.3644574,
+    "current_file": "1226_X1.gcode.3mf",
+    "current_ts": 1773842101.0698574
   },
   "R1-S2-L1-P1": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "1026 мотогондола 003.gcode.3mf",
-    "last_printed_ts": 1773409494.6996
+    "last_gcode_state": "RUNNING",
+    "last_started": "1226_X1.gcode.3mf",
+    "last_started_ts": 1773842097.0798726,
+    "last_printed": "1226_X1.gcode.3mf",
+    "last_printed_ts": 1773838093.5674942,
+    "current_file": "1226_X1.gcode.3mf",
+    "current_ts": 1773842097.0798726
+  },
+  "R1-S2-L2-P2": {
+    "last_gcode_state": "RUNNING",
+    "last_started": "1226_X1.gcode.3mf",
+    "last_started_ts": 1773842095.8677025,
+    "last_printed": "1226_X1.gcode.3mf",
+    "last_printed_ts": 1773837886.0054588,
+    "current_file": "1226_X1.gcode.3mf",
+    "current_ts": 1773842095.8677025
+  },
+  "R1-S3-L1-P2": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773838525.136411,
+    "last_started": "1226_X1",
+    "last_started_ts": 1773842928.3304262,
+    "current_file": "1226_X1",
+    "current_ts": 1773842928.3304262
   },
   "R1-S3-L1-P5": {
     "last_gcode_state": "FINISH",
-    "last_printed": "/data/Metadata/plate_1.gcode",
-    "last_printed_ts": 1773321587.459152
+    "last_printed": "/data/Metadata/plate_2.gcode",
+    "last_printed_ts": 1773842536.360426
   },
-  "R1-S3-L1-P3": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "project_file",
-    "last_printed_ts": 1773391454.2272177
-  },
-  "R1-S3-L2-P1": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "/data/Metadata/plate_1.gcode",
-    "last_printed_ts": 1773321869.1929164
-  },
-  "R1-S3-L2-P5": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "/data/Metadata/plate_1.gcode",
-    "last_printed_ts": 1773321618.3898633
-  },
-  "R1-S3-L1-P4": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "/data/Metadata/plate_1.gcode",
-    "last_printed_ts": 1773321532.2984333
+  "R1-S2-L2-P6": {
+    "last_gcode_state": "RUNNING",
+    "last_started": "test.gcode.3mf",
+    "last_started_ts": 1773722380.033941,
+    "last_printed": "1226_X1.gcode.3mf",
+    "last_printed_ts": 1773837758.7608502,
+    "current_file": "1226_X1.gcode.3mf",
+    "current_ts": 1773842047.740211
   },
   "R1-S2-L1-P6": {
     "last_gcode_state": "FINISH",
-    "last_printed": "Вертикальная стойка.gcode.3mf",
-    "last_printed_ts": 1773391453.3065972
+    "last_started": "test.gcode.3mf",
+    "last_started_ts": 1773463202.0632026,
+    "last_printed": "1226_X1.gcode.3mf",
+    "last_printed_ts": 1773837766.351792
+  },
+  "R1-S2-L1-P5": {
+    "last_gcode_state": "RUNNING",
+    "last_started": "test.gcode.3mf",
+    "last_started_ts": 1773463499.8978164,
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773837884.4751709,
+    "current_file": "1226_X1",
+    "current_ts": 1773842076.6540365
+  },
+  "R1-S3-L2-P1": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773838416.4375985,
+    "current_file": "1226_X1",
+    "current_ts": 1773842927.7871268,
+    "last_started": "1226_X1",
+    "last_started_ts": 1773842927.7871268
   },
   "R1-S2-L1-P2": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "/data/Metadata/plate_1.gcode",
-    "last_printed_ts": 1773409392.387984
+    "last_gcode_state": "RUNNING",
+    "last_started": "test.gcode.3mf",
+    "last_started_ts": 1773463201.1973023,
+    "last_printed": "test.gcode.3mf",
+    "last_printed_ts": 1773751346.0565944,
+    "current_file": "1226_X1",
+    "current_ts": 1773825260.5640862
   },
-  "R1-S2-L2-P1": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "1026 мотогондола 003.gcode.3mf",
-    "last_printed_ts": 1773391858.692934
-  },
-  "R1-S4-L1-P2": {
-    "last_gcode_state": "FINISH",
-    "last_started": "1026 мотогондола 003.gcode.3mf",
-    "last_started_ts": 1773316462.1422207,
-    "last_printed": "1026 мотогондола 003.gcode.3mf",
-    "last_printed_ts": 1773407529.2139668
-  },
-  "R1-S4-L1-P5": {
-    "last_gcode_state": "FAILED",
-    "last_printed": "/data/Metadata/plate_1.gcode",
-    "last_printed_ts": 1773321493.1399643,
-    "current_file": "project_file",
-    "current_ts": 1773391454.3468664
-  },
-  "R1-S4-L1-P6": {
-    "last_gcode_state": "FAILED",
-    "last_printed": "/data/Metadata/plate_1.gcode",
-    "last_printed_ts": 1773321398.6634407,
-    "current_file": "project_file",
-    "current_ts": 1773391454.4322653
+  "R1-S3-L1-P4": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773838496.5945024,
+    "current_file": "1226_X1",
+    "current_ts": 1773842889.5395107,
+    "last_started": "1226_X1",
+    "last_started_ts": 1773842889.5395107
   },
   "R1-S2-L2-P5": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "1026 мотогондола 003.gcode.3mf",
-    "last_printed_ts": 1773409279.1734698
+    "last_gcode_state": "RUNNING",
+    "last_started": "test.gcode.3mf",
+    "last_started_ts": 1773463202.1107914,
+    "last_printed": "test.gcode.3mf",
+    "last_printed_ts": 1773837853.5541325,
+    "current_file": "1226_X1.gcode.3mf",
+    "current_ts": 1773842052.3765986
   },
-  "R1-S4-L1-P1": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "0826 003 X1.gcode.3mf",
-    "last_printed_ts": 1773321265.9154146
+  "R1-S3-L2-P2": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773838380.1963394,
+    "current_file": "1226_X1",
+    "current_ts": 1773842927.3699398,
+    "last_started": "1226_X1",
+    "last_started_ts": 1773842927.3699398
   },
-  "R1-S3-L1-P1": {
-    "last_gcode_state": "FINISH"
-  },
-  "R1-S4-L2-P6": {
+  "R1-S4-L1-P5": {
     "last_gcode_state": "FINISH",
-    "current_file": "/data/Metadata/plate_1.gcode",
-    "current_ts": 1773298411.1720757
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773838840.6948833
+  },
+  "R1-S3-L1-P3": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773840261.734019,
+    "current_file": "1226_X1",
+    "current_ts": 1773842929.7946968,
+    "last_started": "1226_X1",
+    "last_started_ts": 1773842929.7946968
   },
   "R1-S2-L1-P4": {
     "last_gcode_state": "FINISH",
-    "last_printed": "/data/Metadata/plate_1.gcode",
-    "last_printed_ts": 1773410276.1148689
+    "last_started": "test.gcode.3mf",
+    "last_started_ts": 1773463202.512808,
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773837808.543416
   },
-  "R1-S3-L2-P2": {
+  "R1-S3-L1-P1": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773838531.4353395,
+    "last_started": "1226_X1",
+    "last_started_ts": 1773842926.3640668,
+    "current_file": "1226_X1",
+    "current_ts": 1773842926.3640668
+  },
+  "R1-S3-L2-P6": {
     "last_gcode_state": "FINISH",
     "last_printed": "/data/Metadata/plate_1.gcode",
-    "last_printed_ts": 1773391454.1498592
-  },
-  "R1-S3-L2-P3": {
-    "last_gcode_state": "FINISH"
-  },
-  "R2-S3-L1-P6": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "/data/Metadata/plate_1.gcode",
-    "last_printed_ts": 1773321509.8635116
-  },
-  "R1-S2-L2-P2": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "1026 мотогондола 003.gcode.3mf",
-    "last_printed_ts": 1773410472.1716375
-  },
-  "R1-S3-L1-P6": {
-    "last_gcode_state": "FAILED",
-    "current_file": "элевон.gcode.3mf",
-    "current_ts": 1773401781.8578613
-  },
-  "R1-S4-L2-P1": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "0826 003 X1.gcode.3mf",
-    "last_printed_ts": 1773407609.3191907
-  },
-  "R1-S2-L1-P5": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "поворотного_Л_V0.2",
-    "last_printed_ts": 1773308816.154212
+    "last_printed_ts": 1773838373.884541
   },
   "R1-S4-L2-P5": {
     "last_gcode_state": "FINISH",
-    "last_printed": "/data/Metadata/plate_1.gcode",
-    "last_printed_ts": 1773321424.1021516
-  },
-  "R1-S4-L2-P2": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "0826 003 X1.gcode.3mf",
-    "last_printed_ts": 1773407483.3887305
-  },
-  "R1-S3-L2-P4": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "project_file",
-    "last_printed_ts": 1773391453.9316125
-  },
-  "R1-S4-L2-P3": {
-    "last_gcode_state": "FAILED",
-    "current_file": "0826 003 X1.gcode.3mf",
-    "current_ts": 1773298411.6952507
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773838842.8324196
   },
   "R1-S4-L1-P4": {
     "last_gcode_state": "FINISH",
-    "last_started": "1026 мотогондола 003.gcode.3mf",
-    "last_started_ts": 1773316458.2696586,
-    "last_printed": "1026 мотогондола 003.gcode.3mf",
-    "last_printed_ts": 1773408491.9635355
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773838547.5650563
   },
-  "R1-S4-L1-P3": {
-    "last_gcode_state": "FINISH",
-    "last_started": "1026 мотогондола 003.gcode.3mf",
-    "last_started_ts": 1773316464.2995126,
-    "last_printed": "1026 мотогондола 003.gcode.3mf",
-    "last_printed_ts": 1773407669.6296508
-  },
-  "R1-S3-L1-P2": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "/data/Metadata/plate_1.gcode",
-    "last_printed_ts": 1773321536.6625881
-  },
-  "R1-S4-L2-P4": {
-    "last_gcode_state": "FINISH"
-  },
-  "R1-S3-L2-P6": {
-    "last_gcode_state": "FAILED",
-    "last_printed": "/data/Metadata/plate_1.gcode",
-    "last_printed_ts": 1773316675.1252754,
-    "current_file": "project_file",
-    "current_ts": 1773320866.1515296
-  },
-  "R2-S1-L1-P2": {
+  "R1-S2-L2-P3": {
     "last_gcode_state": "RUNNING",
-    "current_file": "/data/Metadata/plate_1.gcode",
-    "current_ts": 1773408523.4370108
+    "last_started": "1226_X1.gcode.3mf",
+    "last_started_ts": 1773842102.0037622,
+    "last_printed": "1226_X1.gcode.3mf",
+    "last_printed_ts": 1773837869.708161,
+    "current_file": "1226_X1.gcode.3mf",
+    "current_ts": 1773842102.0037622
   },
-  "R2-S1-L1-P5": {
+  "R1-S4-L2-P6": {
     "last_gcode_state": "FINISH",
-    "last_printed": "project_file",
-    "last_printed_ts": 1773406148.179303
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773838857.2717853
+  },
+  "R1-S3-L2-P4": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773838396.0984495,
+    "current_file": "1226_X1",
+    "current_ts": 1773842896.063176,
+    "last_started": "1226_X1",
+    "last_started_ts": 1773842896.063176
+  },
+  "R1-S4-L1-P2": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "1226_X1.gcode.3mf",
+    "last_printed_ts": 1773752212.565646
+  },
+  "R1-S3-L2-P5": {
+    "last_gcode_state": "RUNNING",
+    "current_file": "1226_X1",
+    "current_ts": 1773832994.9828503
+  },
+  "R1-S4-L1-P1": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "1226_X1.gcode.3mf",
+    "last_printed_ts": 1773838674.9596345
   },
   "R2-S1-L2-P3": {
     "last_gcode_state": "RUNNING",
-    "last_printed": "project_file",
-    "last_printed_ts": 1773405975.2691703,
-    "current_file": "СТЕГ.741512.010 Упор толкателя задний (4)",
-    "current_ts": 1773408540.1046603
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773838666.5979648,
+    "current_file": "1226_X1",
+    "current_ts": 1773842090.5587916
   },
-  "R2-S1-L2-P6": {
+  "R2-S1-L2-P1": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773837090.5737302,
+    "current_file": "1226_X1",
+    "current_ts": 1773842078.1129665
+  },
+  "R1-S3-L2-P3": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773838408.8703654,
+    "current_file": "project_file",
+    "current_ts": 1773842484.9714975,
+    "last_started": "project_file",
+    "last_started_ts": 1773842484.9714975
+  },
+  "R1-S4-L2-P3": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "1226_X1.gcode.3mf",
+    "last_printed_ts": 1773752219.1864958
+  },
+  "R1-S4-L1-P3": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "1226_X1.gcode.3mf",
+    "last_printed_ts": 1773752225.5406103
+  },
+  "R1-S4-L1-P6": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773838814.462032
+  },
+  "R1-S4-L2-P2": {
+    "last_gcode_state": "FINISH"
+  },
+  "R1-S4-L2-P1": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "1226_X1.gcode.3mf",
+    "last_printed_ts": 1773838778.2740836
+  },
+  "R1-S4-L2-P4": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773838727.1635695
+  },
+  "R2-S1-L1-P3": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773837228.5008705
+  },
+  "R2-S1-L1-P1": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773838641.605696,
+    "current_file": "1226_X1",
+    "current_ts": 1773842103.1041331
+  },
+  "R1-S2-L2-P1": {
+    "last_gcode_state": "RUNNING",
+    "last_started": "1226_X1.gcode.3mf",
+    "last_started_ts": 1773842096.3627057,
+    "last_printed": "1226_X1.gcode.3mf",
+    "last_printed_ts": 1773837849.3755245,
+    "current_file": "1226_X1.gcode.3mf",
+    "current_ts": 1773842096.3627057
+  },
+  "R2-S1-L1-P2": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "auto_cali_for_user_param.gcode",
+    "last_printed_ts": 1773728256.646514,
+    "current_file": "1226_X1",
+    "current_ts": 1773732407.7632535
+  },
+  "R1-S3-L1-P6": {
     "last_gcode_state": "FINISH"
   },
   "R2-S1-L2-P2": {
     "last_gcode_state": "RUNNING",
-    "last_printed": "project_file",
-    "last_printed_ts": 1773405918.0406113,
-    "current_file": "project_file",
-    "current_ts": 1773408428.2860575
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773837091.5946062,
+    "current_file": "1226_X1",
+    "current_ts": 1773842069.4047074
   },
-  "R2-S1-L1-P6": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "project_file",
-    "last_printed_ts": 1773406007.1678286
-  },
-  "R2-S1-L2-P1": {
+  "R1-S2-L2-P4": {
     "last_gcode_state": "RUNNING",
-    "last_printed": "project_file",
-    "last_printed_ts": 1773406024.8676903,
-    "current_file": "project_file",
-    "current_ts": 1773408432.535474
-  },
-  "R2-S1-L1-P3": {
-    "last_gcode_state": "RUNNING",
-    "last_printed": "project_file",
-    "last_printed_ts": 1773405977.1166725,
-    "current_file": "СТЕГ.741512.010 Упор толкателя задний (4)",
-    "current_ts": 1773408553.2316468
+    "current_file": "test.gcode.3mf",
+    "current_ts": 1773463210.2146227,
+    "last_started": "test.gcode.3mf",
+    "last_started_ts": 1773463210.2146227
   },
   "R2-S1-L1-P4": {
     "last_gcode_state": "FINISH",
     "last_printed": "project_file",
-    "last_printed_ts": 1773406008.146677
+    "last_printed_ts": 1773830289.8839004
+  },
+  "R2-S2-L2-P3": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773837566.5018857,
+    "current_file": "1226_X1",
+    "current_ts": 1773842239.4422317
+  },
+  "R2-S1-L1-P5": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "4,85мм_СТЕГ_743111_006_Качалка_сервопривода_щитков_консоли (4",
+    "last_printed_ts": 1773830393.2324715
   },
   "R2-S1-L2-P4": {
-    "last_gcode_state": "FINISH",
-    "last_printed": "project_file",
-    "last_printed_ts": 1773406026.8535516
-  },
-  "R2-S1-L1-P1": {
     "last_gcode_state": "RUNNING",
-    "last_printed": "project_file",
-    "last_printed_ts": 1773405971.1171474,
-    "current_file": "/data/Metadata/plate_1.gcode",
-    "current_ts": 1773408478.680873
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773837106.6878476,
+    "current_file": "1226_X1",
+    "current_ts": 1773842061.3042092
+  },
+  "R2-S3-L1-P6": {
+    "last_gcode_state": "IDLE"
+  },
+  "R2-S2-L2-P2": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773734876.53585,
+    "current_file": "1226_X1",
+    "current_ts": 1773842265.89706
+  },
+  "R2-S2-L2-P5": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773837326.507767,
+    "current_file": "1226_X1",
+    "current_ts": 1773842254.1062853
   },
   "R2-S1-L2-P5": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773837097.7847147,
+    "current_file": "1226_X1",
+    "current_ts": 1773842058.2902923
+  },
+  "R2-S1-L2-P6": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773837273.57273,
+    "current_file": "1226_X1",
+    "current_ts": 1773842056.9114509
+  },
+  "R2-S1-L1-P6": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773837241.137096,
+    "current_file": "1226_X1",
+    "current_ts": 1773842052.6055818
+  },
+  "R2-S2-L1-P6": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773838377.12688,
+    "current_file": "/data/Metadata/plate_1.gcode",
+    "current_ts": 1773842294.0452254
+  },
+  "R2-S2-L1-P4": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773837336.2913513,
+    "current_file": "1226_X1",
+    "current_ts": 1773842266.467121
+  },
+  "R2-S2-L2-P6": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "станина_plate_3",
+    "last_printed_ts": 1773728511.3379817
+  },
+  "R2-S2-L1-P1": {
+    "last_gcode_state": "RUNNING",
+    "current_file": "1226_X1",
+    "current_ts": 1773723307.7248683
+  },
+  "R2-S2-L1-P5": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773837428.5491915,
+    "current_file": "1226_X1",
+    "current_ts": 1773842252.5620756
+  },
+  "R2-S2-L1-P3": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773837369.2783964,
+    "current_file": "1226_X1",
+    "current_ts": 1773842264.566208
+  },
+  "R2-S2-L2-P1": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "1226_X1",
+    "last_printed_ts": 1773837268.3829632,
+    "current_file": "1226_X1",
+    "current_ts": 1773842232.265596
+  },
+  "R2-S2-L1-P2": {
+    "last_gcode_state": "IDLE"
+  },
+  "R2-S2-L2-P4": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "auto_cali_for_user_param.gcode",
+    "last_printed_ts": 1773843183.8650198
+  },
+  "R2-S3-L1-P1": {
+    "last_gcode_state": "IDLE"
+  },
+  "R2-S3-L1-P4": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "/data/Metadata/plate_2.gcode",
+    "last_printed_ts": 1773827962.7730653,
+    "current_file": "project_file",
+    "current_ts": 1773842952.9551003
+  },
+  "R2-S3-L2-P5": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773834941.5092022
+  },
+  "R2-S3-L1-P2": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "/data/Metadata/plate_2.gcode",
+    "last_printed_ts": 1773828032.040398,
+    "current_file": "project_file",
+    "current_ts": 1773842847.5841196
+  },
+  "R1-S5-L1-P1": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "R adapter P1S.gcode.3mf",
+    "last_printed_ts": 1773838693.02215
+  },
+  "R2-S3-L1-P3": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "/data/Metadata/plate_2.gcode",
+    "last_printed_ts": 1773828067.415029,
+    "current_file": "project_file",
+    "current_ts": 1773842931.7457292
+  },
+  "R2-S3-L1-P5": {
+    "last_gcode_state": "IDLE"
+  },
+  "R2-S3-L2-P6": {
     "last_gcode_state": "FINISH"
+  },
+  "R2-S3-L2-P1": {
+    "last_gcode_state": "RUNNING",
+    "last_printed": "/data/Metadata/plate_2.gcode",
+    "last_printed_ts": 1773827916.9201672,
+    "current_file": "project_file",
+    "current_ts": 1773842585.0178852
+  },
+  "R2-S3-L2-P4": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773834881.3520973
+  },
+  "R2-S3-L2-P3": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773834878.4012957
+  },
+  "R2-S3-L2-P2": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773834738.6581347
+  },
+  "R1-S6-L1-P1": {
+    "last_gcode_state": "PAUSE",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773823694.50179,
+    "current_file": "project_file",
+    "current_ts": 1773826088.16816
+  },
+  "R1-S5-L2-P5": {
+    "last_gcode_state": "IDLE"
+  },
+  "R1-S6-L1-P4": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773730742.4564006
+  },
+  "R1-S6-L1-P5": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "СТЕГ_301569_019_Кронштейн_видеопередатчика_в_сборе_V2_2 (2)",
+    "last_printed_ts": 1773730809.9712946
+  },
+  "R1-S6-L1-P3": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773839085.516497
+  },
+  "R1-S6-L2-P3": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773839024.9973526
+  },
+  "R1-S6-L2-P2": {
+    "last_gcode_state": "FAILED",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773824067.636987,
+    "current_file": "project_file",
+    "current_ts": 1773826158.3580604
+  },
+  "R1-S5-L1-P4": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "R adapter P1S.gcode.3mf",
+    "last_printed_ts": 1773838461.934294
+  },
+  "R1-S6-L2-P4": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "СТЕГ_301569_019_Кронштейн_видеопередатчика_в_сборе_V2_2 (2)",
+    "last_printed_ts": 1773730851.8333302
+  },
+  "R1-S5-L2-P3": {
+    "last_gcode_state": "PAUSE",
+    "last_printed": "R adapter P1S.gcode.3mf",
+    "last_printed_ts": 1773823410.7057939,
+    "current_file": "R adapter P1S.gcode.3mf",
+    "current_ts": 1773825824.9883401
+  },
+  "R1-S6-L2-P5": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "/data/Metadata/plate_1.gcode",
+    "last_printed_ts": 1773730797.7250488
+  },
+  "R1-S6-L2-P1": {
+    "last_gcode_state": "FAILED",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773823762.0225294,
+    "current_file": "project_file",
+    "current_ts": 1773826097.388225
+  },
+  "R1-S6-L1-P2": {
+    "last_gcode_state": "FAILED"
+  },
+  "R1-S5-L1-P6": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "Right Adapter 0.12.gcode.3mf",
+    "last_printed_ts": 1773835329.545585
+  },
+  "R1-S6-L2-P6": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "СТЕГ_301569_019_Кронштейн_видеопередатчика_в_сборе_V2_2 (2)",
+    "last_printed_ts": 1773730811.4776912
+  },
+  "R1-S6-L1-P6": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "СТЕГ_301569_019_Кронштейн_видеопередатчика_в_сборе_V2_2 (2)",
+    "last_printed_ts": 1773730820.5606863
+  },
+  "R1-S5-L2-P6": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773835457.098055
+  },
+  "R1-S5-L2-P4": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "project_file",
+    "last_printed_ts": 1773835588.4705007
+  },
+  "R1-S5-L1-P2": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "R adapter P1S.gcode.3mf",
+    "last_printed_ts": 1773838721.8881156
+  },
+  "R1-S5-L2-P2": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "R adapter P1S.gcode.3mf",
+    "last_printed_ts": 1773838715.1488876
+  },
+  "R1-S5-L1-P5": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "R adapter P1S.gcode.3mf",
+    "last_printed_ts": 1773838419.2948198
+  },
+  "R1-S5-L2-P1": {
+    "last_gcode_state": "FINISH",
+    "last_printed": "R adapter P1S.gcode.3mf",
+    "last_printed_ts": 1773838644.549524
   }
-}
 }

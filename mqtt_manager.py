@@ -1,10 +1,10 @@
 import json
 import ssl
+import threading
 import time
 import uuid
-import threading
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional, Any, List
+from typing import Any, Callable, Dict, List, Optional
 
 import paho.mqtt.client as mqtt
 
@@ -15,25 +15,62 @@ class PrinterCfg:
     ip: str
     serial: str
     access_code: str
+    model: str = ""
+
+
+ACTIVE_STATES = {"RUNNING", "PRINTING", "PAUSE", "PAUSED", "PREPARE", "PREPARING"}
+
+
+def _has_value(value: Any) -> bool:
+    return value is not None and value != ""
+
+
+def _safe_int(value: Any) -> Optional[int]:
+    try:
+        if not _has_value(value):
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_float(value: Any) -> Optional[float]:
+    try:
+        if not _has_value(value):
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _merge_non_empty(base: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any]:
+    for key, value in incoming.items():
+        if isinstance(value, dict):
+            nested = base.get(key)
+            if not isinstance(nested, dict):
+                nested = {}
+            base[key] = _merge_non_empty(nested, value)
+        elif _has_value(value):
+            base[key] = value
+    return base
+
+
+def _normalize_report_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+    normalized: Dict[str, Any] = {}
+    report_block = data.get("report")
+    if isinstance(report_block, dict):
+        _merge_non_empty(normalized, report_block)
+    _merge_non_empty(normalized, data)
+    return normalized
 
 
 class MqttStatusManager:
-    """
-    Постоянно держит MQTT TLS соединение к каждому принтеру:
-      - подписывается на device/<serial>/report
-      - парсит JSON
-      - обновляет статусы через callback(pid, status_dict)
-
-    Статус-словарь соответствует тому, что ждёт твой фронт:
-      {id, ok, gcode_state, ts, error}
-    """
-
     def __init__(
         self,
         printers: List[PrinterCfg],
         on_status: Callable[[str, Dict[str, Any]], None],
-        offline_after_sec: float = 50.0,   # если report не приходил > N сек -> offline
-        monitor_interval_sec: float = 3.0, # как часто проверять "протухшие" принтеры
+        offline_after_sec: float = 180.0,
+        monitor_interval_sec: float = 3.0,
         keepalive: int = 60,
     ):
         self._printers = printers
@@ -42,46 +79,68 @@ class MqttStatusManager:
         self._monitor_interval = monitor_interval_sec
         self._keepalive = keepalive
 
-        self._clients: Dict[str, mqtt.Client] = {}     # pid -> client
-        self._last_seen: Dict[str, float] = {}         # pid -> ts последнего report
-        self._last_ok: Dict[str, Optional[bool]] = {}  # чтобы не спамить offline-апдейтами
+        self._clients: Dict[str, mqtt.Client] = {}
+        self._last_seen: Dict[str, float] = {}
+        self._last_ok: Dict[str, Optional[bool]] = {}
+        self._last_status: Dict[str, Dict[str, Any]] = {}
+        self._started_at: Dict[str, float] = {}
         self._stop_evt = threading.Event()
         self._mon_thread: Optional[threading.Thread] = None
-        self._ctl_lock = threading.Lock()
-
+        self._ctl_lock = threading.RLock()
+        self._started = False
 
     def start(self) -> None:
-        """Запускаем подключения ко всем принтерам + монитор offline."""
-        self._stop_evt.clear()
+        with self._ctl_lock:
+            if self._started:
+                return
 
-        for p in self._printers:
-            if not p.ip or not p.serial or not p.access_code:
-                # конфиг неполный -> сразу offline
-                self._emit(p.id, ok=False, gcode_state=None, error="missing_config")
-                continue
+            self._stop_evt.clear()
+            self._clients.clear()
+            self._last_seen.clear()
+            self._last_ok.clear()
+            self._last_status.clear()
+            self._started_at.clear()
 
-            client = self._make_client(p)
-            self._clients[p.id] = client
+            start_ts = time.time()
+            for printer in self._printers:
+                if not printer.ip or not printer.serial or not printer.access_code:
+                    self._last_ok[printer.id] = False
+                    self._emit(printer.id, ok=False, gcode_state=None, error="missing_config")
+                    continue
 
-            # connect_async не блокирует старт (важно при 90 принтерах)
-            client.connect_async(p.ip, 8883, keepalive=self._keepalive)
-            client.loop_start()
+                client = self._make_client(printer)
+                self._clients[printer.id] = client
+                self._last_ok[printer.id] = None
+                self._started_at[printer.id] = start_ts
 
-            # до первого report считаем "неизвестно", но ok пока не False
-            # (чтобы кнопка не стала тёмно-синей сразу)
-            self._last_ok[p.id] = None
+                client.connect_async(printer.ip, 8883, keepalive=self._keepalive)
+                client.loop_start()
 
-        self._mon_thread = threading.Thread(target=self._monitor_loop, daemon=True)
-        self._mon_thread.start()
+            self._mon_thread = threading.Thread(
+                target=self._monitor_loop,
+                daemon=True,
+                name="mqtt-status-monitor",
+            )
+            self._mon_thread.start()
+            self._started = True
 
     def stop(self) -> None:
-        """Остановить все MQTT клиенты и монитор."""
-        self._stop_evt.set()
+        with self._ctl_lock:
+            if not self._started and not self._clients:
+                return
 
-        if self._mon_thread and self._mon_thread.is_alive():
-            self._mon_thread.join(timeout=2.0)
+            self._stop_evt.set()
+            monitor_thread = self._mon_thread
+            clients = list(self._clients.items())
 
-        for pid, client in list(self._clients.items()):
+            self._mon_thread = None
+            self._clients = {}
+            self._started = False
+
+        if monitor_thread and monitor_thread.is_alive():
+            monitor_thread.join(timeout=2.0)
+
+        for _, client in clients:
             try:
                 client.loop_stop()
             except Exception:
@@ -91,116 +150,130 @@ class MqttStatusManager:
             except Exception:
                 pass
 
-        self._clients.clear()
+        with self._ctl_lock:
+            self._last_seen.clear()
+            self._last_ok.clear()
+            self._last_status.clear()
+            self._started_at.clear()
+
     def restart(self) -> None:
-        """Жёстко переподключить все принтеры: stop() + start()."""
         with self._ctl_lock:
             self.stop()
-            # маленькая пауза, чтобы ОС успела закрыть сокеты
             time.sleep(0.3)
             self.start()
 
-    # ----------------- internal -----------------
-
-    def _make_client(self, p: PrinterCfg) -> mqtt.Client:
-        client_id = f"farm-{p.id}-{uuid.uuid4()}"
+    def _make_client(self, printer: PrinterCfg) -> mqtt.Client:
+        client_id = f"farm-{printer.id}-{uuid.uuid4()}"
         client = mqtt.Client(client_id=client_id, protocol=mqtt.MQTTv311)
 
-        # Bambu LAN: username фиксированный bblp, password = access_code
-        client.username_pw_set("bblp", p.access_code)
-
-        # TLS self-signed
+        client.username_pw_set("bblp", printer.access_code)
         client.tls_set(cert_reqs=ssl.CERT_NONE)
         client.tls_insecure_set(True)
-
-        # авто-реконнект
         client.reconnect_delay_set(min_delay=1, max_delay=20)
 
-        topic_report = f"device/{p.serial}/report"
+        topic_report = f"device/{printer.serial}/report"
 
-        def on_connect(cl, userdata, flags, rc):
-            # rc=0 ok
+        def on_connect(cl, userdata, flags, rc, properties=None):
             if rc == 0:
                 cl.subscribe(topic_report)
-                # не ставим ok=True до первого report — чтобы не обманывать интерфейс
             else:
-                self._emit(p.id, ok=False, gcode_state=None, error=f"mqtt_connect_rc_{rc}")
+                self._emit(printer.id, ok=False, gcode_state=None, error=f"mqtt_connect_rc_{rc}")
 
-        def on_disconnect(cl, userdata, rc):
-            # во время массовых FTPS это может быть кратковременно — не темним сразу
-            if not self._stop_evt.is_set():
-                # оставим решение за monitor_loop (stale_no_report)
-                pass
-
+        def on_disconnect(cl, userdata, rc, properties=None):
+            if self._stop_evt.is_set():
+                return
 
         def on_message(cl, userdata, msg):
             try:
                 payload = msg.payload.decode("utf-8", errors="replace")
                 data = json.loads(payload)
+                normalized = _normalize_report_payload(data)
+                pr = normalized.get("print", {}) or {}
+                previous = self._last_status.get(printer.id, {})
 
-                pr = data.get("print", {}) or {}
-                gcode_state = pr.get("gcode_state")
-
-                # имя текущего файла / задания (бывает в разных полях)
+                raw_state = pr.get("gcode_state")
+                remaining_time = pr.get("mc_remaining_time")
+                progress_percent = pr.get("mc_percent")
+                current_layer = pr.get("layer_num")
+                total_layers = pr.get("total_layer_num")
+                nozzle_diameter = pr.get("nozzle_diameter")
                 file_hint = (
                     pr.get("subtask_name")
                     or pr.get("file")
                     or pr.get("gcode_file")
                     or pr.get("project_name")
+                    or previous.get("file")
                 )
 
-                # --- Ошибки печати ---
-                # 1) HMS ошибки обычно в data["hms"] (иногда пустой список)
-                hms_list = data.get("hms") or pr.get("hms") or []
-                # 2) print_error иногда приходит отдельным числом
-                print_error = pr.get("print_error")
+                gcode_state = raw_state
+                state_upper = str(raw_state or "").upper()
+                previous_state = str(previous.get("gcode_state") or "").upper()
+                remaining_time_int = _safe_int(remaining_time)
+                progress_float = _safe_float(progress_percent)
 
-                # Вытаскиваем коды HMS в удобный вид
+                if not gcode_state:
+                    if remaining_time_int is not None and remaining_time_int > 0:
+                        gcode_state = previous_state if previous_state in ACTIVE_STATES else "RUNNING"
+                    elif progress_float is not None and 0 < progress_float < 100:
+                        gcode_state = previous_state if previous_state in ACTIVE_STATES else "RUNNING"
+                    elif remaining_time_int == 0 and previous_state in ACTIVE_STATES:
+                        gcode_state = "FINISH"
+                    elif progress_float is not None and progress_float >= 100 and previous_state in ACTIVE_STATES:
+                        gcode_state = "FINISH"
+                    elif str(printer.model or "").upper() == "P1S" and previous_state in ACTIVE_STATES:
+                        gcode_state = previous_state
+
+                if not _has_value(progress_percent):
+                    progress_percent = previous.get("progress_percent")
+                if not _has_value(current_layer):
+                    current_layer = previous.get("current_layer")
+                if not _has_value(total_layers):
+                    total_layers = previous.get("total_layers")
+                if not _has_value(remaining_time):
+                    remaining_time = previous.get("remaining_time_min")
+                if not _has_value(nozzle_diameter):
+                    nozzle_diameter = previous.get("nozzle_diameter")
+
+                hms_list = normalized.get("hms") or pr.get("hms") or []
+                print_error = pr.get("print_error") or previous.get("print_error")
+
                 hms_codes = []
-                for it in hms_list:
-                    if isinstance(it, dict):
-                        code = it.get("code") or it.get("hms_code") or it.get("hms") or it.get("id")
+                for item in hms_list:
+                    if isinstance(item, dict):
+                        code = item.get("code") or item.get("hms_code") or item.get("hms") or item.get("id")
                         if code is not None:
                             hms_codes.append(str(code))
                     else:
-                        hms_codes.append(str(it))
+                        hms_codes.append(str(item))
 
-                # Нормализация для сравнения кодов (убираем все кроме 0-9A-F)
                 def _norm(code: str) -> str:
                     return "".join(ch for ch in code.upper() if ch in "0123456789ABCDEF")
 
-                # Детект “закончилась нить” (самое важное)
-                # External spool runout: HMS_07FE-7000-0002-0003
-                # AMS slot runout:      HMS_0700-2000-0002-0001
                 filament_runout = False
-                for c in hms_codes:
-                    nc = _norm(c)
-                    if nc == _norm("07FE-7000-0002-0003") or nc == _norm("0700-2000-0002-0001"):
+                for code in hms_codes:
+                    normalized = _norm(code)
+                    if normalized == _norm("07FE-7000-0002-0003") or normalized == _norm("0700-2000-0002-0001"):
                         filament_runout = True
                         break
 
-                # Формируем “error” для фронта
-                # В UI красим ТОЛЬКО "закончился филамент"
-                error = "filament_runout" if filament_runout else None
-
-
-                now = time.time()
-                self._last_seen[p.id] = now
+                self._last_seen[printer.id] = time.time()
 
                 self._emit(
-                    p.id,
+                    printer.id,
                     ok=True,
                     gcode_state=gcode_state,
-                    error=error,
+                    error="filament_runout" if filament_runout else None,
                     file=file_hint,
+                    progress_percent=progress_percent,
+                    current_layer=current_layer,
+                    total_layers=total_layers,
+                    remaining_time_min=remaining_time,
+                    nozzle_diameter=nozzle_diameter,
                     hms=hms_codes,
                     print_error=print_error,
                 )
-
-            except Exception as e:
-                self._emit(p.id, ok=False, gcode_state=None, error=f"bad_report: {e}")
-
-
+            except Exception as exc:
+                self._emit(printer.id, ok=False, gcode_state=None, error=f"bad_report: {exc}")
 
         client.on_connect = on_connect
         client.on_disconnect = on_disconnect
@@ -208,36 +281,43 @@ class MqttStatusManager:
 
         return client
 
-    def _monitor_loop(self):
+    def _monitor_loop(self) -> None:
         while not self._stop_evt.is_set():
             now = time.time()
 
-            for p in self._printers:
-                pid = p.id
-                last = self._last_seen.get(pid)
+            for printer in self._printers:
+                pid = printer.id
+                last_seen = self._last_seen.get(pid)
 
-                # Если ни разу не получали report — не красим offline мгновенно.
-                # Но если прошло "offline_after" после старта и всё ещё нет report — тогда offline.
-                if last is None:
-                    # если менеджер работает давно, а отчёта нет
-                    # отметим offline только если раньше не отметили
-                    if self._last_ok.get(pid) is None:
-                        # пока неизвестно — пропускаем
-                        pass
-                    else:
-                        # уже было ok/false — пропускаем
-                        pass
+                if last_seen is None:
+                    started_at = self._started_at.get(pid)
+                    if started_at is None:
+                        continue
+
+                    if (now - started_at) > self._offline_after and self._last_ok.get(pid) is not False:
+                        self._emit(pid, ok=False, gcode_state=None, error="stale_no_report")
                     continue
 
-                if (now - last) > self._offline_after:
-                    # чтобы не спамить одинаковыми offline каждые 2 секунды
-                    if self._last_ok.get(pid) is not False:
-                        self._emit(pid, ok=False, gcode_state=None, error="stale_no_report")
+                if (now - last_seen) > self._offline_after and self._last_ok.get(pid) is not False:
+                    self._emit(pid, ok=False, gcode_state=None, error="stale_no_report")
 
-            time.sleep(self._monitor_interval)
+            self._stop_evt.wait(self._monitor_interval)
 
-    def _emit(self, pid: str, ok: Optional[bool], gcode_state: Optional[str],
-          error: Optional[str], file=None, hms=None, print_error=None):
+    def _emit(
+        self,
+        pid: str,
+        ok: Optional[bool],
+        gcode_state: Optional[str],
+        error: Optional[str],
+        file=None,
+        progress_percent=None,
+        current_layer=None,
+        total_layers=None,
+        remaining_time_min=None,
+        nozzle_diameter=None,
+        hms=None,
+        print_error=None,
+    ) -> None:
         self._last_ok[pid] = ok
         status = {
             "id": pid,
@@ -245,10 +325,15 @@ class MqttStatusManager:
             "gcode_state": gcode_state,
             "error": error,
             "file": file,
+            "progress_percent": progress_percent,
+            "current_layer": current_layer,
+            "total_layers": total_layers,
+            "remaining_time_min": remaining_time_min,
+            "nozzle_diameter": nozzle_diameter,
             "hms": hms or [],
             "print_error": print_error,
             "ts": time.time(),
         }
+        if ok:
+            self._last_status[pid] = dict(status)
         self._on_status(pid, status)
-
-    

@@ -1,10 +1,10 @@
 import ftplib
-import ssl
-import socket
-import bambulabs_api as bl
-import time
-import printer_lan
 import os
+import socket
+import ssl
+import time
+
+import printer_lan
 
 # Настроить SSL-контекст: при необходимости отключаем проверку сертификата (для самоподписанного сертификата принтера)
 context = ssl.create_default_context()
@@ -99,7 +99,7 @@ def upload_file_to_printer(
         ftps.connect(host=host, port=990, timeout=20)
         ftps.login(user=user, passwd=password)
         ftps.prot_p()
-        ftps.sock.settimeout(180)  # контрольный канал тоже держим подольше
+        ftps.sock.settimeout(180)  
 
 
         if remote_dir:
@@ -123,7 +123,7 @@ def upload_file_to_printer(
 
                 last_update = now
 
-        # Важно: таймауты лучше больше
+        # таймауты лучше больше
         ftps.sock.settimeout(120)
 
         with open(local_path, "rb") as f:
@@ -138,7 +138,6 @@ def upload_file_to_printer(
         return resp
 
     except (socket.timeout, ssl.SSLError, *ftplib.all_errors) as e:
-        # ВАЖНО: не print, а raise (чтобы retry и job-ошибка сработали)
         raise RuntimeError(f"FTPS upload error: {e}") from e
 
     finally:
