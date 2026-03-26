@@ -51,6 +51,49 @@ class PrinterHistory:
             value = (self._data.get(pid) or {}).get("last_printed_ts")
             return float(value) if value is not None else None
 
+    def _coerce_grams(self, value: Any, default: float = 0.0) -> float:
+        try:
+            return round(max(0.0, float(value)), 2)
+        except (TypeError, ValueError):
+            return round(max(0.0, float(default)), 2)
+
+    def ensure_filament_remaining(self, pid: str, grams: float = 1000.0) -> float:
+        remaining = self._coerce_grams(grams, 1000.0)
+        with self._lock:
+            rec = self._data.setdefault(pid, {})
+            current = rec.get("filament_remaining_g")
+            if current is not None:
+                return self._coerce_grams(current, remaining)
+
+            rec["filament_remaining_g"] = remaining
+            self._atomic_save()
+            return remaining
+
+    def get_filament_remaining(self, pid: str, default: float = 1000.0) -> float:
+        with self._lock:
+            current = (self._data.get(pid) or {}).get("filament_remaining_g")
+            if current is None:
+                return self._coerce_grams(default, 1000.0)
+            return self._coerce_grams(current, default)
+
+    def set_filament_remaining(self, pid: str, grams: float) -> float:
+        remaining = self._coerce_grams(grams, 0.0)
+        with self._lock:
+            rec = self._data.setdefault(pid, {})
+            rec["filament_remaining_g"] = remaining
+            self._atomic_save()
+            return remaining
+
+    def consume_filament(self, pid: str, grams: float) -> float:
+        used = self._coerce_grams(grams, 0.0)
+        with self._lock:
+            rec = self._data.setdefault(pid, {})
+            current = self._coerce_grams(rec.get("filament_remaining_g"), 1000.0)
+            remaining = round(max(0.0, current - used), 2)
+            rec["filament_remaining_g"] = remaining
+            self._atomic_save()
+            return remaining
+
     def set_started(self, pid: str, filename: str) -> None:
         now = time.time()
         with self._lock:
@@ -61,19 +104,26 @@ class PrinterHistory:
             rec["current_ts"] = now
             self._atomic_save()
 
-    def note_report(self, pid: str, ok: Optional[bool], gcode_state: Optional[str], file_hint: Optional[str] = None) -> None:
+    def note_report(
+        self,
+        pid: str,
+        ok: Optional[bool],
+        gcode_state: Optional[str],
+        file_hint: Optional[str] = None,
+    ) -> Optional[dict[str, Any]]:
         """
         Вызывать на каждый status/report (из MQTT manager).
         На диск пишем ТОЛЬКО если произошло важное событие (например FINISH).
         """
         if ok is False:
-            return  # offline-метки не пишем на диск
+            return None  # offline-метки не пишем на диск
 
         if not gcode_state:
-            return
+            return None
 
         st = str(gcode_state).upper()
         now = time.time()
+        event: Optional[dict[str, Any]] = None
 
         with self._lock:
             rec = self._data.setdefault(pid, {})
@@ -94,6 +144,7 @@ class PrinterHistory:
                 if finished_file:
                     rec["last_printed"] = finished_file
                     rec["last_printed_ts"] = now
+                    event = {"event": "PRINT_FINISHED", "file": finished_file}
 
                 # текущую работу сбрасываем
                 rec.pop("current_file", None)
@@ -101,3 +152,5 @@ class PrinterHistory:
 
                 #сохраняем на диск только на FINISH/IDLE-переходе
                 self._atomic_save()
+
+        return event

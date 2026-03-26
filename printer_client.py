@@ -6,7 +6,8 @@ import time
 
 import printer_lan
 
-# Настроить SSL-контекст: при необходимости отключаем проверку сертификата (для самоподписанного сертификата принтера)
+# Настроить SSL-контекст: при необходимости отключаем проверку сертификата
+# для самоподписанного сертификата принтера.
 context = ssl.create_default_context()
 context.check_hostname = False
 context.verify_mode = ssl.CERT_NONE
@@ -14,12 +15,13 @@ context.verify_mode = ssl.CERT_NONE
 
 class ImplicitFTP_TLS(ftplib.FTP_TLS):
     """Подкласс FTP_TLS для implicit FTPS: сразу устанавливает TLS на сокете."""
+
     def __init__(self, *args, **kwargs):
-        # Используем наш SSL-контекст, если не задан другой
-        if 'context' not in kwargs:
-            kwargs['context'] = context
+        # Используем наш SSL-контекст, если не задан другой.
+        if "context" not in kwargs:
+            kwargs["context"] = context
         super().__init__(*args, **kwargs)
-        self._sock = None  # инициализация собственного атрибута сокета
+        self._sock = None  # Инициализация собственного атрибута сокета.
 
     @property
     def sock(self):
@@ -27,7 +29,7 @@ class ImplicitFTP_TLS(ftplib.FTP_TLS):
 
     @sock.setter
     def sock(self, value):
-        # При установке сокета оборачиваем его в TLS, если он ещё не SSLSocket
+        # При установке сокета оборачиваем его в TLS, если он ещё не SSLSocket.
         if value is not None and not isinstance(value, ssl.SSLSocket):
             value = self.context.wrap_socket(value, server_hostname=self.host)
         self._sock = value
@@ -35,10 +37,11 @@ class ImplicitFTP_TLS(ftplib.FTP_TLS):
     def ntransfercmd(self, cmd, rest=None):
         """Переопределение для повторного использования TLS-сессии на дата-соединениях."""
         conn, size = ftplib.FTP.ntransfercmd(self, cmd, rest)
-        if self._prot_p:  # если установлен защищенный режим для данных
-            # Оборачиваем data-socket в TLS, используя ту же сессию, что и у контрол-сокета
+        if self._prot_p:  # Если установлен защищённый режим для данных.
+            # Оборачиваем data-socket в TLS, используя ту же сессию,
+            # что и у контрол-сокета.
             conn = self.context.wrap_socket(conn, server_hostname=self.host, session=self.sock.session)
-        # ускорение
+        # Ускорение.
         try:
             conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         except Exception:
@@ -47,12 +50,9 @@ class ImplicitFTP_TLS(ftplib.FTP_TLS):
             conn.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
         except Exception:
             pass
-        
+
         conn.settimeout(180)
         return conn, size
-
-
-
 
 
 def start_print_on_printer(
@@ -61,17 +61,24 @@ def start_print_on_printer(
     serial: str,
     filename: str,
     plate_num: int = 1,
+    plate_path: str | None = None,
+    model: str = "",
 ) -> None:
     print(f"[PRINT] Start {filename} on {ip} ({serial}) plate={plate_num}")
-    printer = printer_lan.Printer(ip=ip, serial=serial, access_code=access_code)
-    
-    ok = printer.start_print(filename_on_sd=filename, plate_num=plate_num, timeout=45)
+    printer = printer_lan.Printer(ip=ip, serial=serial, access_code=access_code, model=model)
+
+    ok = printer.start_print(
+        filename_on_sd=filename,
+        plate_num=plate_num,
+        plate_path=plate_path,
+        timeout=45,
+    )
     if not ok:
-        # Fallback: подождать чуть-чуть и спросить статус 1-2 раза
+        # Fallback: подождать чуть-чуть и спросить статус 1-2 раза.
         time.sleep(2.0)
         st = printer.getStatus(timeout=6.0)
 
-        # Попробуем вытащить причину
+        # Попробуем вытащить причину.
         pr = st.get("print") or {}
         gcode_state = pr.get("gcode_state")
         err = pr.get("print_error") or pr.get("err") or pr.get("fail_reason")
@@ -80,9 +87,6 @@ def start_print_on_printer(
             raise RuntimeError(f"start_print not confirmed, state={gcode_state}, err={err}")
         else:
             raise RuntimeError(f"start_print not confirmed, state={gcode_state}")
-
-
-
 
 
 def upload_file_to_printer(
@@ -99,8 +103,7 @@ def upload_file_to_printer(
         ftps.connect(host=host, port=990, timeout=20)
         ftps.login(user=user, passwd=password)
         ftps.prot_p()
-        ftps.sock.settimeout(180)  
-
+        ftps.sock.settimeout(180)
 
         if remote_dir:
             ftps.cwd(remote_dir)
@@ -123,7 +126,7 @@ def upload_file_to_printer(
 
                 last_update = now
 
-        # таймауты лучше больше
+        # Таймауты лучше больше.
         ftps.sock.settimeout(120)
 
         with open(local_path, "rb") as f:
@@ -131,7 +134,7 @@ def upload_file_to_printer(
 
         print("\nЗагрузка завершена! FTP:", resp)
 
-        # Проверка результата
+        # Проверка результата.
         if not resp or not str(resp).startswith("226"):
             raise RuntimeError(f"FTP upload failed, server reply: {resp}")
 

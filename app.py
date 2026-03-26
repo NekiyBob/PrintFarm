@@ -5,19 +5,29 @@ import random
 import threading
 import time
 import uuid
+import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
 import yaml
 from flask import Flask, jsonify, render_template, request
-from werkzeug.utils import secure_filename
 
+from file_weight_store import FileWeightStore
+from maintenance_db import init_maintenance_db
+from maintenance_models import MAINTENANCE_TIMEZONE, MaintenanceEvent, MaintenanceEventType, maintenance_now
+from maintenance_service import (
+    create_maintenance_event,
+    get_farm_maintenance_history,
+    get_printer_maintenance_history,
+)
 from mqtt_manager import MqttStatusManager, PrinterCfg
 from printer_client import start_print_on_printer, upload_file_to_printer
 from printer_history import PrinterHistory
 from printer_lan import Printer
+from project_weight import get_total_weight_from_gcode_3mf
 
 
 UPLOAD_CONCURRENCY = 3
@@ -28,6 +38,7 @@ DEFAULT_METADATA_WORKERS = 8
 JOB_RETENTION_SEC = 6 * 60 * 60
 FINISH_HIGHLIGHT_SEC = 15 * 60
 MQTT_OFFLINE_AFTER_SEC = 180.0
+DEFAULT_FILAMENT_REMAINING_G = 1000
 
 UPLOAD_SEM = threading.Semaphore(UPLOAD_CONCURRENCY)
 RESTART_SEM = threading.Semaphore(RESTART_CONCURRENCY)
@@ -35,6 +46,8 @@ RESTART_SEM = threading.Semaphore(RESTART_CONCURRENCY)
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "printers.yaml"
 HISTORY_PATH = BASE_DIR / "printer_history.json"
+FILE_WEIGHTS_PATH = BASE_DIR / "file_weights.json"
+MAINTENANCE_DB_PATH = BASE_DIR / "maintance"
 JOBS_DIR = BASE_DIR / "jobs"
 
 STATUS_CACHE: dict[str, dict[str, Any]] = {}
@@ -81,6 +94,22 @@ def _load_printers_config(path: Path) -> tuple[list[dict[str, Any]], dict[str, d
 
 PRINTERS, PRINTERS_BY_ID = _load_printers_config(CONFIG_PATH)
 HISTORY = PrinterHistory(str(HISTORY_PATH))
+FILE_WEIGHTS = FileWeightStore(str(FILE_WEIGHTS_PATH))
+MAINTENANCE_ENGINE = init_maintenance_db(MAINTENANCE_DB_PATH)
+
+
+def _ensure_filament_history_defaults() -> None:
+    for printer in PRINTERS:
+        HISTORY.ensure_filament_remaining(printer["id"], DEFAULT_FILAMENT_REMAINING_G)
+
+
+_ensure_filament_history_defaults()
+
+
+def _reload_printers_config() -> None:
+    global PRINTERS, PRINTERS_BY_ID
+    PRINTERS, PRINTERS_BY_ID = _load_printers_config(CONFIG_PATH)
+    _ensure_filament_history_defaults()
 
 
 def get_printer(printer_id: str) -> Optional[dict[str, Any]]:
@@ -219,6 +248,7 @@ def _build_printer_details(
             "bed_target_temp": _safe_float(print_block.get("bed_target_temper")),
             "nozzle_diameter": print_block.get("nozzle_diameter"),
             "loaded_material": tray_block.get("tray_type") or tray_block.get("tray_sub_brands") or tray_block.get("tray_info_idx"),
+            "filament_remaining_g": HISTORY.get_filament_remaining(printer["id"], DEFAULT_FILAMENT_REMAINING_G),
             "can_pause": state_upper in {"RUNNING", "PRINTING", "PREPARE", "PREPARING"},
             "can_resume": state_upper in {"PAUSE", "PAUSED"},
             "can_stop": state_upper in active_states,
@@ -231,6 +261,7 @@ def _build_printer_client(printer: dict[str, Any]) -> Printer:
         ip=printer["ip"],
         serial=printer["serial"],
         access_code=printer["access_code"],
+        model=printer.get("model") or "",
     )
 
 
@@ -277,6 +308,155 @@ def _normalize_printer_ids(raw_value: Any) -> list[str]:
         raise ValueError("no printers specified")
 
     return normalized
+
+
+def _serialize_maintenance_event(event: MaintenanceEvent) -> dict[str, Any]:
+    def _numeric_or_none(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        return float(value)
+
+    return {
+        "id": event.id,
+        "printer_id": event.printer_id,
+        "event_type": event.event_type.value,
+        "event_at": event.event_at.isoformat() if event.event_at else None,
+        "performed_by": event.performed_by,
+        "note": event.note,
+        "nozzle_diameter": _numeric_or_none(event.nozzle_diameter),
+        "custom_type_name": event.custom_type_name,
+        "print_hours_snapshot": _numeric_or_none(event.print_hours_snapshot),
+        "print_count_snapshot": event.print_count_snapshot,
+        "created_at": event.created_at.isoformat() if event.created_at else None,
+    }
+
+
+def _parse_iso_datetime(value: Any, *, field_name: str) -> datetime:
+    if value is None or str(value).strip() == "":
+        raise ValueError(f"{field_name} is required")
+
+    raw_value = str(value).strip()
+    if raw_value.endswith("Z"):
+        raw_value = f"{raw_value[:-1]}+00:00"
+
+    try:
+        parsed = datetime.fromisoformat(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a valid ISO 8601 datetime") from exc
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=MAINTENANCE_TIMEZONE)
+    return parsed.astimezone(MAINTENANCE_TIMEZONE)
+
+
+def _parse_optional_iso_datetime(value: Any, *, field_name: str) -> Optional[datetime]:
+    if value is None or str(value).strip() == "":
+        return None
+    return _parse_iso_datetime(value, field_name=field_name)
+
+
+def _parse_optional_limit(value: Any) -> Optional[int]:
+    if value is None or str(value).strip() == "":
+        return None
+
+    try:
+        limit = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("limit must be an integer") from exc
+
+    if limit <= 0:
+        raise ValueError("limit must be greater than 0")
+    return limit
+
+
+def _read_maintenance_filters() -> dict[str, Any]:
+    date_from = _parse_optional_iso_datetime(request.args.get("date_from"), field_name="date_from")
+    date_to = _parse_optional_iso_datetime(request.args.get("date_to"), field_name="date_to")
+
+    if date_from and date_to and date_from > date_to:
+        raise ValueError("date_from must be earlier than or equal to date_to")
+
+    return {
+        "event_type": request.args.get("event_type"),
+        "performed_by": request.args.get("performed_by"),
+        "date_from": date_from,
+        "date_to": date_to,
+        "limit": _parse_optional_limit(request.args.get("limit")),
+    }
+
+
+def _parse_optional_json_text(value: Any, *, field_name: str) -> Optional[str]:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a string")
+
+    normalized = value.strip()
+    return normalized or None
+
+
+def _build_maintenance_event_payload(data: dict[str, Any]) -> dict[str, Any]:
+    raw_event_type = data.get("event_type")
+    if not isinstance(raw_event_type, str) or not raw_event_type.strip():
+        raise ValueError("event_type is required and must be a non-empty string")
+
+    normalized_event_type = raw_event_type.strip().upper()
+    nozzle_diameter = data.get("nozzle_diameter")
+    custom_type_name = _parse_optional_json_text(data.get("custom_type_name"), field_name="custom_type_name")
+
+    if normalized_event_type == MaintenanceEventType.NOZZLE_REPLACEMENT.value and nozzle_diameter in (None, ""):
+        raise ValueError("nozzle_diameter is required when event_type is NOZZLE_REPLACEMENT")
+
+    if normalized_event_type == MaintenanceEventType.OTHER.value and not custom_type_name:
+        raise ValueError("custom_type_name is required when event_type is OTHER")
+
+    return {
+        "event_type": normalized_event_type,
+        "event_at": _parse_optional_iso_datetime(data.get("event_at"), field_name="event_at")
+        or maintenance_now(),
+        "performed_by": _parse_optional_json_text(data.get("performed_by"), field_name="performed_by"),
+        "note": _parse_optional_json_text(data.get("note"), field_name="note"),
+        "nozzle_diameter": nozzle_diameter,
+        "custom_type_name": custom_type_name,
+        "print_hours_snapshot": data.get("print_hours_snapshot"),
+        "print_count_snapshot": data.get("print_count_snapshot"),
+    }
+
+
+def _detect_project_plate_path(temp_path: str) -> Optional[str]:
+    lower_name = Path(temp_path).name.lower()
+    if not (lower_name.endswith(".3mf") or lower_name.endswith(".gcode.3mf")):
+        return None
+
+    try:
+        with zipfile.ZipFile(temp_path) as archive:
+            candidates: list[tuple[int, str]] = []
+
+            for member in archive.namelist():
+                normalized = member.replace("\\", "/")
+                lower = normalized.lower()
+                if not lower.startswith("metadata/plate_") or not lower.endswith(".gcode"):
+                    continue
+
+                plate_number_text = lower[len("metadata/plate_") : -len(".gcode")]
+                try:
+                    plate_number = int(plate_number_text)
+                except ValueError:
+                    plate_number = 10**9
+
+                candidates.append((plate_number, normalized))
+    except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile):
+        return None
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    for plate_number, normalized in candidates:
+        if plate_number == 1:
+            return normalized
+
+    return candidates[0][1]
 
 
 def _cleanup_finished_jobs(now: Optional[float] = None) -> None:
@@ -443,7 +623,14 @@ def _cleanup_upload_artifacts(temp_path: str) -> None:
         pass
 
 
-def _process_one_printer(job_id: str, pid: str, printer: dict[str, Any], temp_path: str, safe_name: str) -> None:
+def _process_one_printer(
+    job_id: str,
+    pid: str,
+    printer: dict[str, Any],
+    temp_path: str,
+    original_name: str,
+    project_plate_path: Optional[str] = None,
+) -> None:
     ip = printer["ip"]
     serial = printer["serial"]
     access_code = printer["access_code"]
@@ -474,14 +661,22 @@ def _process_one_printer(job_id: str, pid: str, printer: dict[str, Any], temp_pa
 
         _job_set(job_id, pid, stage="starting", message=None)
         retry(
-            lambda: start_print_on_printer(ip, access_code, serial, safe_name, plate_num=1),
+            lambda: start_print_on_printer(
+                ip,
+                access_code,
+                serial,
+                original_name,
+                plate_num=1,
+                plate_path=project_plate_path,
+                model=printer.get("model") or "",
+            ),
             tries=3,
             base_delay=1.0,
             factor=2.0,
             on_retry=log_retry("starting"),
         )
 
-        HISTORY.set_started(pid, safe_name)
+        HISTORY.set_started(pid, original_name)
 
         _job_set(job_id, pid, stage="started", message=None)
         _job_done(job_id, pid, ok=True)
@@ -544,7 +739,13 @@ def _restart_one_printer(job_id: str, pid: str, printer: dict[str, Any]) -> None
 
         def do_start():
             with RESTART_SEM:
-                return start_print_on_printer(ip, access_code, serial, restart_file)
+                return start_print_on_printer(
+                    ip,
+                    access_code,
+                    serial,
+                    restart_file,
+                    model=printer.get("model") or "",
+                )
 
         retry(
             do_start,
@@ -610,7 +811,8 @@ def _run_job(
     job_id: str,
     printer_ids: list[str],
     temp_path: str,
-    safe_name: str,
+    original_name: str,
+    project_plate_path: Optional[str] = None,
     max_workers: int = DEFAULT_UPLOAD_WORKERS,
 ) -> None:
     valid: list[tuple[str, dict[str, Any]]] = []
@@ -640,7 +842,15 @@ def _run_job(
         worker_count = max(1, min(max_workers, len(valid)))
         with ThreadPoolExecutor(max_workers=worker_count) as executor:
             future_map = {
-                executor.submit(_process_one_printer, job_id, pid, printer, temp_path, safe_name): pid
+                executor.submit(
+                    _process_one_printer,
+                    job_id,
+                    pid,
+                    printer,
+                    temp_path,
+                    original_name,
+                    project_plate_path,
+                ): pid
                 for pid, printer in valid
             }
 
@@ -702,15 +912,37 @@ def _run_upload_only_job(
 
 
 def _on_status(pid: str, status: dict[str, Any]) -> None:
-    with STATUS_LOCK:
-        STATUS_CACHE[pid] = status
+    status_for_cache = dict(status)
+    filament_load_event = status_for_cache.pop("filament_load_event", None)
+    filament_remaining_g = HISTORY.get_filament_remaining(pid, DEFAULT_FILAMENT_REMAINING_G)
 
-    HISTORY.note_report(
+    if filament_load_event == "LOAD_FILAMENT_STARTED":
+        print(f"[LOAD FILAMENT] {pid}")
+
+    if filament_load_event == "LOAD_FILAMENT_FINISHED":
+        filament_remaining_g = HISTORY.set_filament_remaining(pid, DEFAULT_FILAMENT_REMAINING_G)
+
+    status_for_cache["filament_remaining_g"] = filament_remaining_g
+
+    with STATUS_LOCK:
+        STATUS_CACHE[pid] = status_for_cache
+
+    history_event = HISTORY.note_report(
         pid=pid,
         ok=status.get("ok"),
         gcode_state=status.get("gcode_state"),
         file_hint=status.get("file"),
     )
+
+    if history_event and history_event.get("event") == "PRINT_FINISHED":
+        finished_file = history_event.get("file")
+        weight_g = FILE_WEIGHTS.get_weight(str(finished_file or ""))
+        if weight_g is not None and weight_g > 0:
+            remaining_after_print = HISTORY.consume_filament(pid, weight_g)
+            with STATUS_LOCK:
+                current = dict(STATUS_CACHE.get(pid) or {"id": pid})
+                current["filament_remaining_g"] = remaining_after_print
+                STATUS_CACHE[pid] = current
 
 
 def _build_mqtt_manager() -> MqttStatusManager:
@@ -784,6 +1016,7 @@ def api_status():
         status = cache.get(pid, {"id": pid, "ok": None, "gcode_state": "NONE"})
         status = _normalize_runtime_status_for_printer(printer, status)
         status["model"] = printer.get("model")
+        status["filament_remaining_g"] = HISTORY.get_filament_remaining(pid, DEFAULT_FILAMENT_REMAINING_G)
         status["last_printed"] = HISTORY.get_last_printed(pid)
         status["last_printed_ts"] = HISTORY.get_last_printed_ts(pid)
         status["finish_recent"] = _is_recent_finish(status, status["last_printed_ts"], now=now)
@@ -809,7 +1042,84 @@ def index():
 
 @app.get("/api/printers")
 def api_printers():
+    _reload_printers_config()
     return jsonify([_sanitize_printer(printer) for printer in PRINTERS])
+
+
+@app.get("/printers/<printer_id>/maintenance")
+def api_printer_maintenance_history(printer_id: str):
+    printer, error_response = _get_printer_or_error(printer_id)
+    if error_response:
+        return error_response
+
+    try:
+        filters = _read_maintenance_filters()
+        items = get_printer_maintenance_history(printer["id"], **filters)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify(
+        {
+            "printer_id": printer["id"],
+            "items": [_serialize_maintenance_event(event) for event in items],
+        }
+    )
+
+
+@app.post("/printers/<printer_id>/maintenance")
+def api_create_printer_maintenance_event(printer_id: str):
+    printer, error_response = _get_printer_or_error(printer_id)
+    if error_response:
+        return error_response
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "request body must be a JSON object"}), 400
+
+    try:
+        payload = _build_maintenance_event_payload(data)
+        event = create_maintenance_event(
+            printer_id=printer["id"],
+            **payload,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"item": _serialize_maintenance_event(event)}), 201
+
+
+@app.get("/maintenance")
+def api_farm_maintenance_history():
+    printer_id = request.args.get("printer_id")
+    if printer_id:
+        printer, error_response = _get_printer_or_error(printer_id)
+        if error_response:
+            return error_response
+        normalized_printer_id = printer["id"]
+    else:
+        normalized_printer_id = None
+
+    try:
+        filters = {"printer_id": normalized_printer_id, **_read_maintenance_filters()}
+        items = get_farm_maintenance_history(**filters)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify(
+        {
+            "filters": {
+                "printer_id": normalized_printer_id,
+                "event_type": request.args.get("event_type"),
+                "performed_by": request.args.get("performed_by"),
+                "date_from": request.args.get("date_from"),
+                "date_to": request.args.get("date_to"),
+                "limit": filters["limit"],
+            },
+            "items": [_serialize_maintenance_event(event) for event in items],
+        }
+    )
 
 
 @app.get("/api/printers/<printer_id>/details")
@@ -898,14 +1208,10 @@ def api_upload_and_print():
     if not original_name:
         return jsonify({"error": "empty filename"}), 400
 
-    safe_name = secure_filename(original_name) or original_name
-    if not safe_name:
-        return jsonify({"error": "invalid filename"}), 400
-
     job_id = uuid.uuid4().hex
     upload_dir = JOBS_DIR / job_id
     upload_dir.mkdir(parents=True, exist_ok=True)
-    temp_path = upload_dir / safe_name
+    temp_path = upload_dir / original_name
 
     try:
         file.save(temp_path)
@@ -913,11 +1219,16 @@ def api_upload_and_print():
         _cleanup_upload_artifacts(str(temp_path))
         return jsonify({"error": f"failed_to_save_upload: {exc}"}), 500
 
+    project_plate_path = _detect_project_plate_path(str(temp_path))
+    project_weight_g = get_total_weight_from_gcode_3mf(str(temp_path))
+    if project_weight_g is not None:
+        FILE_WEIGHTS.set_weight(original_name, project_weight_g)
+
     with JOBS_LOCK:
         JOB_COMPLETIONS[job_id] = set()
         JOBS[job_id] = {
             "job_id": job_id,
-            "filename": safe_name,
+            "filename": original_name,
             "created_ts": time.time(),
             "finished_ts": None,
             "total": len(printer_ids),
@@ -930,7 +1241,7 @@ def api_upload_and_print():
 
     thread = threading.Thread(
         target=_run_job,
-        args=(job_id, printer_ids, str(temp_path), safe_name),
+        args=(job_id, printer_ids, str(temp_path), original_name, project_plate_path),
         daemon=True,
     )
     thread.start()
@@ -959,14 +1270,10 @@ def api_upload_to_sd():
     if not original_name:
         return jsonify({"error": "empty filename"}), 400
 
-    safe_name = secure_filename(original_name) or original_name
-    if not safe_name:
-        return jsonify({"error": "invalid filename"}), 400
-
     job_id = uuid.uuid4().hex
     upload_dir = JOBS_DIR / job_id
     upload_dir.mkdir(parents=True, exist_ok=True)
-    temp_path = upload_dir / safe_name
+    temp_path = upload_dir / original_name
 
     try:
         file.save(temp_path)
@@ -974,11 +1281,15 @@ def api_upload_to_sd():
         _cleanup_upload_artifacts(str(temp_path))
         return jsonify({"error": f"failed_to_save_upload: {exc}"}), 500
 
+    project_weight_g = get_total_weight_from_gcode_3mf(str(temp_path))
+    if project_weight_g is not None:
+        FILE_WEIGHTS.set_weight(original_name, project_weight_g)
+
     with JOBS_LOCK:
         JOB_COMPLETIONS[job_id] = set()
         JOBS[job_id] = {
             "job_id": job_id,
-            "filename": safe_name,
+            "filename": original_name,
             "created_ts": time.time(),
             "finished_ts": None,
             "total": len(printer_ids),
@@ -1039,13 +1350,24 @@ def api_restart_last_printed():
 
 @app.post("/api/mqtt/restart")
 def api_mqtt_restart():
-    manager = _ensure_mqtt_manager()
+    global MQTT_MANAGER
+
+    try:
+        _reload_printers_config()
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"config_reload_failed: {exc}"}), 500
+
+    with MQTT_MANAGER_LOCK:
+        manager = MQTT_MANAGER
+        MQTT_MANAGER = None
 
     with STATUS_LOCK:
         STATUS_CACHE.clear()
 
     try:
-        manager.restart()
+        if manager is not None:
+            manager.stop()
+        _ensure_mqtt_manager()
         _start_printer_metadata_refresh()
         return jsonify({"ok": True})
     except Exception as exc:

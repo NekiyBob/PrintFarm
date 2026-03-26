@@ -1,12 +1,28 @@
 const appState = {
   printers: [],
   printerMap: new Map(),
+  statusMap: new Map(),
   selectionMode: false,
   drawerPrinterId: null,
+  drawerTab: "general",
+  drawerDetails: null,
   detailsRequestId: 0,
   detailsRefreshTimer: null,
   drawerActionPending: false,
+  maintenanceByPrinter: new Map(),
 };
+
+const MAINTENANCE_EVENT_OPTIONS = [
+  { value: "CLEANING_LUBRICATION", label: "Чистка и смазка" },
+  { value: "NOZZLE_REPLACEMENT", label: "Замена сопла" },
+  { value: "FAN_REPLACEMENT", label: "Замена вентилятора" },
+  { value: "EXTRUDER_REPLACEMENT", label: "Замена экструдера" },
+  { value: "EXTRUDER_CLEANING", label: "Чистка экструдера" },
+  { value: "OTHER", label: "Другое" },
+];
+
+const MAINTENANCE_NOZZLE_OPTIONS = ["0.2", "0.4", "0.6"];
+const MAINTENANCE_PERFORMED_BY_PLACEHOLDER = "Не указано";
 
 async function loadPrinters() {
   const resp = await fetch("/api/printers");
@@ -46,15 +62,61 @@ function hasStatusValue(value) {
   return value !== null && value !== undefined && value !== "";
 }
 
+function createDefaultMaintenanceDraft() {
+  return {
+    eventType: "NOZZLE_REPLACEMENT",
+    nozzleDiameter: "0.4",
+    customTypeName: "",
+    note: "",
+  };
+}
+
+function getMaintenanceUiState(printerId) {
+  let state = appState.maintenanceByPrinter.get(printerId);
+  if (!state) {
+    state = {
+      items: null,
+      loading: false,
+      error: "",
+      requestId: 0,
+      submitting: false,
+      formMessage: "",
+      formMessageKind: "",
+      draft: createDefaultMaintenanceDraft(),
+    };
+    appState.maintenanceByPrinter.set(printerId, state);
+  }
+  return state;
+}
+
+function setDrawerTab(nextTab) {
+  if (!["general", "maintenance"].includes(nextTab)) return;
+  appState.drawerTab = nextTab;
+
+  if (appState.drawerDetails) {
+    renderPrinterDetails(appState.drawerDetails);
+  }
+
+  if (nextTab === "maintenance" && appState.drawerPrinterId) {
+    void loadMaintenanceHistoryForPrinter(appState.drawerPrinterId);
+  }
+}
+
 function setSelectionMode(nextValue) {
+  const wasSelectionMode = appState.selectionMode;
   appState.selectionMode = nextValue;
   document.body.classList.toggle("selection-mode", nextValue);
 
   const toggleBtn = document.getElementById("select-mode-btn");
   const hint = document.getElementById("grid-hint");
+  const jobPanel = document.getElementById("job-panel");
   if (toggleBtn) {
     toggleBtn.classList.toggle("is-active", nextValue);
     toggleBtn.textContent = nextValue ? "Готово" : "Выбрать";
+  }
+
+  if (jobPanel) {
+    jobPanel.hidden = !nextValue;
   }
 
   if (hint) {
@@ -66,6 +128,14 @@ function setSelectionMode(nextValue) {
   if (nextValue) {
     closeDrawer();
   }
+
+  if (wasSelectionMode && !nextValue) {
+    document.querySelectorAll(".printer-btn.selected").forEach((btn) => {
+      btn.classList.remove("selected");
+    });
+  }
+
+  updateSelectionCount();
 }
 
 function stopDetailsAutoRefresh() {
@@ -84,12 +154,17 @@ function startDetailsAutoRefresh() {
       stopDetailsAutoRefresh();
       return;
     }
+    if (appState.drawerTab === "maintenance") {
+      return;
+    }
     loadPrinterDetails(appState.drawerPrinterId, { silent: true });
   }, 5000);
 }
 
 function closeDrawer() {
   appState.drawerPrinterId = null;
+  appState.drawerDetails = null;
+  appState.drawerTab = "general";
   stopDetailsAutoRefresh();
   document.body.classList.remove("drawer-open");
 
@@ -100,7 +175,12 @@ function closeDrawer() {
 }
 
 function openDrawerShell(printer, { silent = false } = {}) {
+  const isNewPrinter = appState.drawerPrinterId !== printer.id;
   appState.drawerPrinterId = printer.id;
+  if (isNewPrinter) {
+    appState.drawerTab = "general";
+    appState.drawerDetails = null;
+  }
   document.body.classList.add("drawer-open");
 
   const drawer = document.getElementById("details-drawer");
@@ -116,9 +196,42 @@ function openDrawerShell(printer, { silent = false } = {}) {
   if (title) {
     title.textContent = printer.name || printer.id;
   }
-  if (content && !silent) {
-    content.innerHTML = `<div class="drawer-loading">Загрузка информации о принтере...</div>`;
-  }
+}
+
+function buildCachedPrinterDetails(printer) {
+  const cachedStatus = appState.statusMap.get(printer.id) || {};
+  const stateUpper = String(cachedStatus.gcode_state || "").toUpperCase();
+  const activeStates = new Set(["RUNNING", "PRINTING", "PAUSE", "PAUSED", "PREPARE", "PREPARING"]);
+  const isActivePrint = activeStates.has(stateUpper);
+
+  return {
+    id: printer.id,
+    name: printer.name,
+    ip: printer.ip,
+    model: printer.model,
+    configured: Boolean(printer.configured),
+    status: {
+      ok: cachedStatus.ok,
+      error: cachedStatus.error,
+      gcode_state: cachedStatus.gcode_state || null,
+      is_active_print: isActivePrint,
+      current_file: isActivePrint ? (cachedStatus.file || cachedStatus.current_file || null) : null,
+      current_layer: cachedStatus.current_layer ?? null,
+      total_layers: cachedStatus.total_layers ?? null,
+      remaining_time_min: cachedStatus.remaining_time_min ?? null,
+      progress_percent: cachedStatus.progress_percent ?? null,
+      nozzle_temp: cachedStatus.nozzle_temp ?? null,
+      nozzle_target_temp: cachedStatus.nozzle_target_temp ?? null,
+      bed_temp: cachedStatus.bed_temp ?? null,
+      bed_target_temp: cachedStatus.bed_target_temp ?? null,
+      nozzle_diameter: cachedStatus.nozzle_diameter ?? null,
+      loaded_material: cachedStatus.loaded_material ?? null,
+      filament_remaining_g: cachedStatus.filament_remaining_g ?? null,
+      can_pause: ["RUNNING", "PRINTING", "PREPARE", "PREPARING"].includes(stateUpper),
+      can_resume: ["PAUSE", "PAUSED"].includes(stateUpper),
+      can_stop: isActivePrint,
+    },
+  };
 }
 
 function buildPrinterButtonContent(printer) {
@@ -169,7 +282,12 @@ function buildGrid(printers) {
       return;
     }
 
-    loadPrinterDetails(printer.id);
+    openDrawerShell(printer, { silent: true });
+    renderPrinterDetails(buildCachedPrinterDetails(printer));
+    requestAnimationFrame(() => {
+      if (appState.drawerPrinterId !== printer.id) return;
+      loadPrinterDetails(printer.id, { silent: true, skipOpen: true });
+    });
   }
 
   function makePrinterButton(printer) {
@@ -324,6 +442,7 @@ async function refreshStatuses() {
   for (const status of data.statuses || []) {
     statusMap.set(status.id, status);
   }
+  appState.statusMap = statusMap;
 
   document.querySelectorAll(".printer-btn").forEach((btn) => {
     const pid = btn.dataset.printerId;
@@ -511,6 +630,9 @@ function renderPrinterDetails(details) {
   const stateText = status.gcode_state || status.error || "Нет данных";
   const nozzleDiameter = status.nozzle_diameter || "—";
   const loadedMaterial = status.loaded_material || "—";
+  const filamentRemaining = hasStatusValue(status.filament_remaining_g)
+    ? formatValue(status.filament_remaining_g, " г")
+    : "—";
   const primaryAction = status.can_resume ? "resume" : "pause";
   const primaryActionLabel = status.can_resume ? "Возобновить" : "Пауза";
   const primaryDisabled = (!status.can_pause && !status.can_resume) || appState.drawerActionPending ? "disabled" : "";
@@ -545,6 +667,10 @@ function renderPrinterDetails(details) {
           <span class="meta-label">Материал</span>
           <span class="meta-value">${escapeHtml(loadedMaterial)}</span>
         </div>
+        <div class="meta-item">
+          <span class="meta-label">Остаток пластика</span>
+          <span class="meta-value">${escapeHtml(filamentRemaining)}</span>
+        </div>
       </div>
     </section>
 
@@ -571,7 +697,7 @@ function renderPrinterDetails(details) {
         </div>
         <div class="progress-line">
           <span>Прогресс</span>
-          <strong>${formatValue(Math.round(progress), "%")}</strong>
+          <strong>${hasProgress ? formatValue(Math.round(progress), "%") : "—"}</strong>
         </div>
         <div class="progress-track">
           <div class="progress-fill" style="width: ${progress}%"></div>
@@ -648,11 +774,13 @@ async function runPrinterAction(action) {
   }
 }
 
-async function loadPrinterDetails(printerId, { silent = false } = {}) {
+async function loadPrinterDetails(printerId, { silent = false, skipOpen = false } = {}) {
   const printer = appState.printerMap.get(printerId);
   if (!printer) return;
 
-  openDrawerShell(printer, { silent });
+  if (!skipOpen) {
+    openDrawerShell(printer, { silent });
+  }
   const requestId = ++appState.detailsRequestId;
 
   try {
@@ -718,6 +846,526 @@ async function submitFileJob({ endpoint, statusText, statusEl, fileInput, button
     buttonsToDisable.forEach((btn) => {
       btn.disabled = false;
     });
+  }
+}
+
+function formatDrawerDateTime(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatMaintenanceComment(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  return escapeHtml(String(value)).replaceAll("\n", "<br>");
+}
+
+function getMaintenanceTypeLabel(eventType, customTypeName) {
+  const labels = {
+    FAN_REPLACEMENT: "Замена вентилятора",
+    NOZZLE_REPLACEMENT: "Замена сопла",
+    CLEANING_LUBRICATION: "Чистка и смазка",
+    EXTRUDER_REPLACEMENT: "Замена экструдера",
+    EXTRUDER_CLEANING: "Чистка экструдера",
+    OTHER: customTypeName || "Другое",
+  };
+  return labels[eventType] || eventType || "—";
+}
+
+function formatMaintenanceNozzleLabel(value) {
+  if (!hasStatusValue(value)) return "—";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return `${value} мм`;
+  return `${numeric.toFixed(1)} мм`;
+}
+
+function buildPrettySelect(fieldName, value, options, { disabled = false } = {}) {
+  const selectedOption = options.find((option) => option.value === value) || options[0] || null;
+  const stateClass = disabled ? " is-disabled" : "";
+  const triggerLabel = selectedOption ? selectedOption.label : "";
+
+  return `
+    <details class="pretty-select${stateClass}" ${disabled ? 'data-disabled="true"' : ""}>
+      <summary class="pretty-select-trigger" aria-haspopup="listbox">
+        <span class="pretty-select-trigger-text">${escapeHtml(triggerLabel)}</span>
+        <span class="pretty-select-trigger-icon" aria-hidden="true"></span>
+      </summary>
+      <div class="pretty-select-menu" role="listbox">
+        ${options.map((option) => `
+          <button
+            type="button"
+            class="pretty-select-option ${option.value === value ? "is-selected" : ""}"
+            data-select-field="${fieldName}"
+            data-select-value="${option.value}"
+            role="option"
+            aria-selected="${option.value === value ? "true" : "false"}"
+            ${disabled ? "disabled" : ""}
+          >
+            <span class="pretty-select-option-label">${escapeHtml(option.label)}</span>
+            <span class="pretty-select-option-check" aria-hidden="true">${option.value === value ? "✓" : ""}</span>
+          </button>
+        `).join("")}
+      </div>
+    </details>
+  `;
+}
+
+function buildGeneralDetailsTab(details) {
+  const status = details.status || {};
+  const hasProgress = hasStatusValue(status.progress_percent);
+  const progress = hasProgress ? normalizeProgress(status.progress_percent) : 0;
+  const fileName = status.is_active_print ? status.current_file || "Не удалось определить" : "Сейчас не печатает";
+  const stateText = status.gcode_state || status.error || "Нет данных";
+  const nozzleDiameter = status.nozzle_diameter || "—";
+  const loadedMaterial = status.loaded_material || "—";
+  const filamentRemaining = hasStatusValue(status.filament_remaining_g)
+    ? formatValue(status.filament_remaining_g, " г")
+    : "—";
+  const primaryAction = status.can_resume ? "resume" : "pause";
+  const primaryActionLabel = status.can_resume ? "Возобновить" : "Пауза";
+  const primaryDisabled = (!status.can_pause && !status.can_resume) || appState.drawerActionPending ? "disabled" : "";
+  const stopDisabled = !status.can_stop || appState.drawerActionPending ? "disabled" : "";
+
+  return `
+    <section class="drawer-section">
+      <h4>Основная информация</h4>
+      <div class="drawer-meta">
+        <div class="meta-item">
+          <span class="meta-label">Название</span>
+          <span class="meta-value">${escapeHtml(details.name || "—")}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">IP</span>
+          <span class="meta-value">${escapeHtml(details.ip || "—")}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Модель</span>
+          <span class="meta-value">${escapeHtml(details.model || "—")}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Состояние</span>
+          <span class="meta-value">${escapeHtml(stateText)}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Диаметр сопла</span>
+          <span class="meta-value">${escapeHtml(nozzleDiameter)}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Материал</span>
+          <span class="meta-value">${escapeHtml(loadedMaterial)}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Остаток пластика</span>
+          <span class="meta-value">${escapeHtml(filamentRemaining)}</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="drawer-section">
+      <div class="section-head">
+        <h4>Печать</h4>
+        <div class="section-actions">
+          <button type="button" class="btn btn-small" data-printer-action="${primaryAction}" ${primaryDisabled}>${primaryActionLabel}</button>
+          <button type="button" class="btn btn-small btn-danger" data-printer-action="stop" ${stopDisabled}>Отмена</button>
+        </div>
+      </div>
+      <div class="progress-card">
+        <div class="progress-line">
+          <span>Файл</span>
+          <strong>${escapeHtml(fileName)}</strong>
+        </div>
+        <div class="progress-line">
+          <span>Слой</span>
+          <strong>${formatLayer(status.current_layer, status.total_layers)}</strong>
+        </div>
+        <div class="progress-line">
+          <span>Осталось времени</span>
+          <strong>${formatRemainingTime(status.remaining_time_min)}</strong>
+        </div>
+        <div class="progress-line">
+          <span>Прогресс</span>
+          <strong>${hasProgress ? formatValue(Math.round(progress), "%") : "—"}</strong>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" style="width: ${progress}%"></div>
+        </div>
+        <div id="print-action-status" class="drawer-inline-status"></div>
+      </div>
+    </section>
+
+    <section class="drawer-section">
+      <h4>Температуры</h4>
+      <div class="temp-grid">
+        <div class="temp-card">
+          <strong>Сопло</strong>
+          <span>${formatTemperature(status.nozzle_temp, status.nozzle_target_temp)}</span>
+        </div>
+        <div class="temp-card">
+          <strong>Стол</strong>
+          <span>${formatTemperature(status.bed_temp, status.bed_target_temp)}</span>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function buildMaintenanceForm(printerId) {
+  const state = getMaintenanceUiState(printerId);
+  const draft = state.draft;
+  const disabled = state.submitting ? "disabled" : "";
+  const showNozzleField = draft.eventType === "NOZZLE_REPLACEMENT";
+  const showCustomTypeField = draft.eventType === "OTHER";
+  const formStatusClass = state.formMessageKind ? ` drawer-inline-status is-${state.formMessageKind}` : " drawer-inline-status";
+  const nozzleOptions = MAINTENANCE_NOZZLE_OPTIONS.map((option) => ({ value: option, label: `${option} мм` }));
+
+  return `
+    <section class="drawer-section maintenance-form-section">
+      <div class="section-head maintenance-section-head">
+        <div>
+          <h4>Новая запись</h4>
+          <div class="section-subtitle">Дата записи подставляется автоматически.</div>
+        </div>
+      </div>
+
+      <form id="maintenance-form" class="maintenance-form">
+        <label class="maintenance-field">
+          <span class="maintenance-label">Тип обслуживания</span>
+          ${buildPrettySelect("event_type", draft.eventType, MAINTENANCE_EVENT_OPTIONS, { disabled: Boolean(disabled) })}
+        </label>
+
+        ${showNozzleField ? `
+          <label class="maintenance-field">
+            <span class="maintenance-label">Диаметр сопла</span>
+            ${buildPrettySelect("nozzle_diameter", draft.nozzleDiameter, nozzleOptions, { disabled: Boolean(disabled) })}
+          </label>
+        ` : ""}
+
+        ${showCustomTypeField ? `
+          <label class="maintenance-field">
+            <span class="maintenance-label">Описание обслуживания</span>
+            <input
+              type="text"
+              name="custom_type_name"
+              class="input maintenance-input"
+              placeholder="Опишите выполненное обслуживание"
+              value="${escapeHtml(draft.customTypeName)}"
+              ${disabled}
+            />
+          </label>
+        ` : ""}
+
+        <label class="maintenance-field">
+          <span class="maintenance-label">Комментарий</span>
+          <textarea
+            name="note"
+            class="input maintenance-textarea"
+            rows="3"
+            placeholder="Дополнительные детали по обслуживанию"
+            ${disabled}
+          >${escapeHtml(draft.note)}</textarea>
+        </label>
+
+        <div class="maintenance-form-footer">
+          <div id="maintenance-form-status" class="${formStatusClass.trim()}">${escapeHtml(state.formMessage || "")}</div>
+          <button type="submit" class="btn btn-primary" ${disabled}>Сохранить</button>
+        </div>
+      </form>
+    </section>
+  `;
+}
+
+function buildMaintenanceHistory(printerId) {
+  const state = getMaintenanceUiState(printerId);
+  const items = Array.isArray(state.items) ? state.items : [];
+
+  let historyContent = "";
+  if (state.loading && items.length === 0) {
+    historyContent = `<div class="drawer-loading">Загружаем историю обслуживания...</div>`;
+  } else if (state.error && items.length === 0) {
+    historyContent = `<div class="drawer-empty">${escapeHtml(state.error)}</div>`;
+  } else if (items.length === 0) {
+    historyContent = `<div class="drawer-empty">Для этого принтера пока нет записей обслуживания.</div>`;
+  } else {
+    historyContent = `
+      <div class="maintenance-history-list">
+        ${items.map((item) => `
+          <article class="maintenance-entry">
+            <div class="maintenance-entry-row">
+              <span class="maintenance-entry-label">Дата</span>
+              <strong>${escapeHtml(formatDrawerDateTime(item.event_at))}</strong>
+            </div>
+            <div class="maintenance-entry-row">
+              <span class="maintenance-entry-label">Тип обслуживания</span>
+              <strong>${escapeHtml(getMaintenanceTypeLabel(item.event_type, item.custom_type_name))}</strong>
+            </div>
+            ${hasStatusValue(item.nozzle_diameter) ? `
+              <div class="maintenance-entry-row">
+                <span class="maintenance-entry-label">Диаметр сопла</span>
+                <strong>${escapeHtml(formatMaintenanceNozzleLabel(item.nozzle_diameter))}</strong>
+              </div>
+            ` : ""}
+            <div class="maintenance-entry-row maintenance-entry-row-comment">
+              <span class="maintenance-entry-label">Комментарий</span>
+              <span class="maintenance-entry-comment">${formatMaintenanceComment(item.note)}</span>
+            </div>
+          </article>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  return `
+    <section class="drawer-section">
+      <div class="section-head maintenance-section-head">
+        <div>
+          <h4>История обслуживания</h4>
+          <div class="section-subtitle">Список записей по этому принтеру.</div>
+        </div>
+      </div>
+      ${state.loading && items.length > 0 ? '<div class="maintenance-history-state">Обновляем историю...</div>' : ""}
+      ${state.error && items.length > 0 ? `<div class="maintenance-history-state is-error">${escapeHtml(state.error)}</div>` : ""}
+      ${historyContent}
+    </section>
+  `;
+}
+
+function bindFinalDrawerTabs(content) {
+  content.querySelectorAll("[data-drawer-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setDrawerTab(button.dataset.drawerTab);
+    });
+  });
+}
+
+function bindFinalGeneralActions(content) {
+  content.querySelectorAll("[data-printer-action]").forEach((button) => {
+    button.addEventListener("click", () => runPrinterAction(button.dataset.printerAction));
+  });
+}
+
+function bindMaintenanceFormControls(content, details) {
+  const form = content.querySelector("#maintenance-form");
+  if (!form) return;
+
+  const printerId = details.id;
+  const state = getMaintenanceUiState(printerId);
+
+  const clearFormMessage = () => {
+    state.formMessage = "";
+    state.formMessageKind = "";
+  };
+
+  form.querySelectorAll("[data-select-field]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const field = button.dataset.selectField;
+      const nextValue = button.dataset.selectValue || "";
+      if (!field || !nextValue) return;
+      const dropdown = button.closest(".pretty-select");
+
+      clearFormMessage();
+
+      if (field === "event_type") {
+        state.draft.eventType = nextValue;
+        if (nextValue === "NOZZLE_REPLACEMENT" && !state.draft.nozzleDiameter) {
+          state.draft.nozzleDiameter = "0.4";
+        }
+      }
+
+      if (field === "nozzle_diameter") {
+        state.draft.nozzleDiameter = nextValue;
+      }
+
+      if (dropdown) {
+        dropdown.removeAttribute("open");
+      }
+
+      renderPrinterDetails(appState.drawerDetails || details);
+    });
+  });
+
+  const customTypeField = form.querySelector('[name="custom_type_name"]');
+  if (customTypeField) {
+    customTypeField.addEventListener("input", () => {
+      clearFormMessage();
+      state.draft.customTypeName = customTypeField.value;
+    });
+  }
+
+  const noteField = form.querySelector('[name="note"]');
+  if (noteField) {
+    noteField.addEventListener("input", () => {
+      clearFormMessage();
+      state.draft.note = noteField.value;
+    });
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await submitMaintenanceRecord(printerId);
+  });
+}
+
+async function loadMaintenanceHistoryForPrinter(printerId, { force = false } = {}) {
+  const state = getMaintenanceUiState(printerId);
+  if (state.loading) return;
+  if (!force && Array.isArray(state.items)) return;
+
+  state.loading = true;
+  state.error = "";
+  state.requestId += 1;
+  const requestId = state.requestId;
+
+  if (appState.drawerPrinterId === printerId && appState.drawerTab === "maintenance" && appState.drawerDetails) {
+    renderPrinterDetails(appState.drawerDetails);
+  }
+
+  try {
+    const resp = await fetch(`/printers/${encodeURIComponent(printerId)}/maintenance`);
+    const data = await resp.json().catch(async () => ({ error: await resp.text() }));
+    if (requestId !== state.requestId) return;
+    if (!resp.ok) {
+      throw new Error(data.error || "Не удалось загрузить историю обслуживания");
+    }
+
+    state.items = Array.isArray(data.items) ? data.items : [];
+  } catch (e) {
+    if (requestId !== state.requestId) return;
+    state.error = `Не удалось загрузить историю: ${e.message}`;
+  } finally {
+    if (requestId === state.requestId) {
+      state.loading = false;
+    }
+
+    if (appState.drawerPrinterId === printerId && appState.drawerTab === "maintenance" && appState.drawerDetails) {
+      renderPrinterDetails(appState.drawerDetails);
+    }
+  }
+}
+
+async function submitMaintenanceRecord(printerId) {
+  const state = getMaintenanceUiState(printerId);
+  if (state.submitting) return;
+
+  state.submitting = true;
+  state.loading = false;
+  state.requestId += 1;
+  state.formMessage = "Сохраняем запись...";
+  state.formMessageKind = "";
+
+  if (appState.drawerPrinterId === printerId && appState.drawerDetails) {
+    renderPrinterDetails(appState.drawerDetails);
+  }
+
+  const payload = {
+    event_type: state.draft.eventType,
+    performed_by: MAINTENANCE_PERFORMED_BY_PLACEHOLDER,
+    note: state.draft.note.trim(),
+  };
+
+  if (state.draft.eventType === "NOZZLE_REPLACEMENT") {
+    payload.nozzle_diameter = state.draft.nozzleDiameter || "0.4";
+  }
+
+  if (state.draft.eventType === "OTHER") {
+    payload.custom_type_name = state.draft.customTypeName.trim();
+  }
+
+  try {
+    const resp = await fetch(`/printers/${encodeURIComponent(printerId)}/maintenance`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json().catch(async () => ({ error: await resp.text() }));
+    if (!resp.ok) {
+      throw new Error(data.error || "Не удалось сохранить запись");
+    }
+
+    const item = data.item;
+    if (!item) {
+      throw new Error("Сервер не вернул сохранённую запись");
+    }
+
+    state.items = Array.isArray(state.items) ? [item, ...state.items] : [item];
+    state.error = "";
+    state.draft = createDefaultMaintenanceDraft();
+    state.formMessage = "Запись обслуживания сохранена.";
+    state.formMessageKind = "success";
+  } catch (e) {
+    state.formMessage = `Ошибка: ${e.message}`;
+    state.formMessageKind = "error";
+  } finally {
+    state.submitting = false;
+
+    if (appState.drawerPrinterId === printerId && appState.drawerDetails) {
+      renderPrinterDetails(appState.drawerDetails);
+    }
+  }
+}
+
+function renderPrinterDetails(details) {
+  appState.drawerDetails = details;
+
+  const title = document.getElementById("drawer-title");
+  const content = document.getElementById("drawer-content");
+  const eyebrow = document.querySelector("#details-drawer .drawer-eyebrow");
+  if (!content) return;
+
+  if (eyebrow) {
+    eyebrow.textContent = `Принтер ${details.id || "—"}`;
+  }
+
+  if (title) {
+    title.textContent = details.name || details.id;
+  }
+
+  const generalTabActive = appState.drawerTab !== "maintenance";
+  const maintenanceTabActive = !generalTabActive;
+
+  content.innerHTML = `
+    <div class="drawer-tabs" role="tablist" aria-label="Вкладки принтера">
+      <button
+        type="button"
+        class="drawer-tab-btn ${generalTabActive ? "is-active" : ""}"
+        data-drawer-tab="general"
+      >
+        Общая информация
+      </button>
+      <button
+        type="button"
+        class="drawer-tab-btn ${maintenanceTabActive ? "is-active" : ""}"
+        data-drawer-tab="maintenance"
+      >
+        Обслуживание
+      </button>
+    </div>
+
+    <div class="drawer-tab-panel" ${generalTabActive ? "" : "hidden"}>
+      ${buildGeneralDetailsTab(details)}
+    </div>
+
+    <div class="drawer-tab-panel" ${maintenanceTabActive ? "" : "hidden"}>
+      ${buildMaintenanceForm(details.id)}
+      ${buildMaintenanceHistory(details.id)}
+    </div>
+  `;
+
+  bindFinalDrawerTabs(content);
+
+  if (generalTabActive) {
+    bindFinalGeneralActions(content);
+  }
+
+  if (maintenanceTabActive) {
+    bindMaintenanceFormControls(content, details);
+    void loadMaintenanceHistoryForPrinter(details.id);
   }
 }
 
@@ -837,9 +1485,18 @@ async function main() {
       }
 
       statusEl.textContent = "Переподключение запущено. Ждём статусы...";
+      const printers = await loadPrinters();
+      appState.printers = printers;
+      appState.printerMap = new Map(printers.map((printer) => [printer.id, printer]));
+      buildGrid(printers);
+      updateSelectionCount();
       setTimeout(refreshStatuses, 2000);
       if (appState.drawerPrinterId) {
-        setTimeout(() => loadPrinterDetails(appState.drawerPrinterId, { silent: true }), 2000);
+        if (appState.printerMap.has(appState.drawerPrinterId)) {
+          setTimeout(() => loadPrinterDetails(appState.drawerPrinterId, { silent: true }), 2000);
+        } else {
+          closeDrawer();
+        }
       }
     } catch (e) {
       statusEl.textContent = "Ошибка: " + e.message;

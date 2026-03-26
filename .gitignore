@@ -3,3 +3,6 @@ test.py
 t2.gcode
 p1sFileSend.py
 jobs/
+TESTS/
+__pycache__/
+MqttTest.py

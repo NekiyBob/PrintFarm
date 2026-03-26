@@ -8,6 +8,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 import paho.mqtt.client as mqtt
 
+from filament_detector import LoadFilamentDetector
+
 
 @dataclass(frozen=True)
 class PrinterCfg:
@@ -84,6 +86,7 @@ class MqttStatusManager:
         self._last_ok: Dict[str, Optional[bool]] = {}
         self._last_status: Dict[str, Dict[str, Any]] = {}
         self._started_at: Dict[str, float] = {}
+        self._load_detectors: Dict[str, LoadFilamentDetector] = {}
         self._stop_evt = threading.Event()
         self._mon_thread: Optional[threading.Thread] = None
         self._ctl_lock = threading.RLock()
@@ -100,6 +103,7 @@ class MqttStatusManager:
             self._last_ok.clear()
             self._last_status.clear()
             self._started_at.clear()
+            self._load_detectors.clear()
 
             start_ts = time.time()
             for printer in self._printers:
@@ -155,6 +159,7 @@ class MqttStatusManager:
             self._last_ok.clear()
             self._last_status.clear()
             self._started_at.clear()
+            self._load_detectors.clear()
 
     def restart(self) -> None:
         with self._ctl_lock:
@@ -190,6 +195,8 @@ class MqttStatusManager:
                 normalized = _normalize_report_payload(data)
                 pr = normalized.get("print", {}) or {}
                 previous = self._last_status.get(printer.id, {})
+                detector = self._load_detectors.setdefault(printer.id, LoadFilamentDetector())
+                filament_load_event = detector.update(normalized)
 
                 raw_state = pr.get("gcode_state")
                 remaining_time = pr.get("mc_remaining_time")
@@ -271,6 +278,7 @@ class MqttStatusManager:
                     nozzle_diameter=nozzle_diameter,
                     hms=hms_codes,
                     print_error=print_error,
+                    filament_load_event=filament_load_event,
                 )
             except Exception as exc:
                 self._emit(printer.id, ok=False, gcode_state=None, error=f"bad_report: {exc}")
@@ -317,6 +325,7 @@ class MqttStatusManager:
         nozzle_diameter=None,
         hms=None,
         print_error=None,
+        filament_load_event: Optional[str] = None,
     ) -> None:
         self._last_ok[pid] = ok
         status = {
@@ -334,6 +343,10 @@ class MqttStatusManager:
             "print_error": print_error,
             "ts": time.time(),
         }
+        if filament_load_event:
+            status["filament_load_event"] = filament_load_event
         if ok:
-            self._last_status[pid] = dict(status)
+            stored_status = dict(status)
+            stored_status.pop("filament_load_event", None)
+            self._last_status[pid] = stored_status
         self._on_status(pid, status)

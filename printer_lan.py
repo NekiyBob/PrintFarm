@@ -59,10 +59,16 @@ class Printer:
       access_code - access code (пароль для bblp)
     """
 
-    def __init__(self, ip: str, serial: str, access_code: str):
+    def __init__(self, ip: str, serial: str, access_code: str, model: str = ""):
         self.ip = ip
         self.serial = serial
         self.access_code = access_code
+        self.model = str(model or "").strip().upper()
+
+    def _build_project_url(self, name: str) -> str:
+        if self.model == "P2S":
+            return f"ftp://{name}"
+        return f"file:///sdcard/{name}"
 
     
 
@@ -285,6 +291,7 @@ class Printer:
         self,
         filename_on_sd: str,
         plate_num: int = 1,
+        plate_path: str | None = None,
         timeout: float = 25.0,
         bed_leveling: bool = False,
         flow_cali: bool = False,
@@ -338,12 +345,14 @@ class Printer:
 
             # =========================
             # 2) .gcode.3mf 
-            project_url = f"file:///sdcard/{name}"
+            
+            project_url = self._build_project_url(name)
+            selected_plate_path = plate_path or f"Metadata/plate_{plate_num}.gcode"
 
             base_print = {
                 "sequence_id": "1",
                 "command": "project_file",
-                "param": f"Metadata/plate_{plate_num}.gcode",
+                "param": selected_plate_path,
                 "url": project_url,
                 "file": name,
                 "subtask_name": name,
