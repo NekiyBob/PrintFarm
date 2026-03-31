@@ -6,3 +6,4 @@ jobs/
 TESTS/
 __pycache__/
 MqttTest.py
+printer_history.json
