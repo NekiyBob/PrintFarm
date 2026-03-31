@@ -12,6 +12,13 @@ context = ssl.create_default_context()
 context.check_hostname = False
 context.verify_mode = ssl.CERT_NONE
 
+DEFAULT_TRANSFER_TIMEOUT_SEC = 180
+P1S_TRANSFER_TIMEOUT_SEC = 300
+P1S_CONTROL_TIMEOUT_SEC = 300
+P1S_BLOCKSIZE = 32 * 1024
+
+START_CONFIRMED_STATES = {"RUNNING", "PRINTING", "PREPARE", "PREPARING"}
+
 
 class ImplicitFTP_TLS(ftplib.FTP_TLS):
     """Подкласс FTP_TLS для implicit FTPS: сразу устанавливает TLS на сокете."""
@@ -22,6 +29,7 @@ class ImplicitFTP_TLS(ftplib.FTP_TLS):
             kwargs["context"] = context
         super().__init__(*args, **kwargs)
         self._sock = None  # Инициализация собственного атрибута сокета.
+        self._transfer_timeout = DEFAULT_TRANSFER_TIMEOUT_SEC
 
     @property
     def sock(self):
@@ -51,8 +59,25 @@ class ImplicitFTP_TLS(ftplib.FTP_TLS):
         except Exception:
             pass
 
-        conn.settimeout(180)
+        conn.settimeout(self._transfer_timeout)
         return conn, size
+
+
+def _storbinary_without_unwrap(ftps, cmd, fp, blocksize=8192, callback=None, rest=None):
+    """
+    P1S может зависать на SSLSocket.unwrap() после STOR.
+    В этом режиме закрываем data-сокет напрямую и ждём ответ сервера.
+    """
+    ftps.voidcmd("TYPE I")
+    conn = ftps.transfercmd(cmd, rest)
+    try:
+        while buf := fp.read(blocksize):
+            conn.sendall(buf)
+            if callback:
+                callback(buf)
+    finally:
+        conn.close()
+    return ftps.voidresp()
 
 
 def start_print_on_printer(
@@ -80,9 +105,11 @@ def start_print_on_printer(
 
         # Попробуем вытащить причину.
         pr = st.get("print") or {}
-        gcode_state = pr.get("gcode_state")
+        gcode_state = st.get("gcode_state") or pr.get("gcode_state")
         err = pr.get("print_error") or pr.get("err") or pr.get("fail_reason")
 
+        if str(gcode_state or "").upper() in START_CONFIRMED_STATES:
+            return
         if err:
             raise RuntimeError(f"start_print not confirmed, state={gcode_state}, err={err}")
         else:
@@ -96,14 +123,23 @@ def upload_file_to_printer(
     remote_dir: str = "/",
     user: str = "bblp",
     blocksize=256 * 1024,
+    model: str = "",
 ):
     ftps = None
     try:
+        normalized_model = str(model or "").strip().upper()
+        is_p1s = normalized_model == "P1S"
+
         ftps = ImplicitFTP_TLS()
         ftps.connect(host=host, port=990, timeout=20)
         ftps.login(user=user, passwd=password)
         ftps.prot_p()
-        ftps.sock.settimeout(180)
+        if is_p1s:
+            ftps._transfer_timeout = P1S_TRANSFER_TIMEOUT_SEC
+            ftps.sock.settimeout(P1S_CONTROL_TIMEOUT_SEC)
+            blocksize = P1S_BLOCKSIZE
+        else:
+            ftps.sock.settimeout(180)
 
         if remote_dir:
             ftps.cwd(remote_dir)
@@ -127,10 +163,14 @@ def upload_file_to_printer(
                 last_update = now
 
         # Таймауты лучше больше.
-        ftps.sock.settimeout(120)
+        if not is_p1s:
+            ftps.sock.settimeout(120)
 
         with open(local_path, "rb") as f:
-            resp = ftps.storbinary(f"STOR {filename}", f, blocksize, callback=handle_block)
+            if is_p1s:
+                resp = _storbinary_without_unwrap(ftps, f"STOR {filename}", f, blocksize, callback=handle_block)
+            else:
+                resp = ftps.storbinary(f"STOR {filename}", f, blocksize, callback=handle_block)
 
         print("\nЗагрузка завершена! FTP:", resp)
 

@@ -28,6 +28,7 @@ from printer_client import start_print_on_printer, upload_file_to_printer
 from printer_history import PrinterHistory
 from printer_lan import Printer
 from project_weight import get_total_weight_from_gcode_3mf
+from status_utils import extract_loaded_material_from_payload
 
 
 UPLOAD_CONCURRENCY = 3
@@ -197,6 +198,31 @@ def _normalize_runtime_status_for_printer(
     return normalized
 
 
+def _extract_loaded_material(
+    payload: Optional[dict[str, Any]],
+    *,
+    cached_status: Optional[dict[str, Any]] = None,
+) -> Optional[str]:
+    return extract_loaded_material_from_payload(
+        payload,
+        cached_status=cached_status,
+    )
+
+
+def _resolve_loaded_material(
+    printer_id: str,
+    payload: Optional[dict[str, Any]] = None,
+    *,
+    cached_status: Optional[dict[str, Any]] = None,
+    fallback_value: Optional[str] = None,
+) -> Optional[str]:
+    return (
+        HISTORY.get_material_override(printer_id)
+        or _extract_loaded_material(payload, cached_status=cached_status)
+        or fallback_value
+    )
+
+
 def _is_recent_finish(status: dict[str, Any], last_printed_ts: Optional[float], now: Optional[float] = None) -> bool:
     if str(status.get("gcode_state") or "").upper() != "FINISH":
         return False
@@ -213,7 +239,6 @@ def _build_printer_details(
     configured = bool(printer.get("ip") and printer.get("serial") and printer.get("access_code"))
     payload = _normalize_status_payload_for_model(printer, status_payload)
     print_block = payload.get("print") or {}
-    tray_block = print_block.get("vt_tray") or {}
     cached_status = cached_status or {}
     gcode_state = _coalesce(payload.get("gcode_state"), print_block.get("gcode_state"), cached_status.get("gcode_state"))
     state_upper = str(gcode_state or "").upper()
@@ -247,7 +272,11 @@ def _build_printer_details(
             "bed_temp": _safe_float(print_block.get("bed_temper")),
             "bed_target_temp": _safe_float(print_block.get("bed_target_temper")),
             "nozzle_diameter": print_block.get("nozzle_diameter"),
-            "loaded_material": tray_block.get("tray_type") or tray_block.get("tray_sub_brands") or tray_block.get("tray_info_idx"),
+            "loaded_material": _resolve_loaded_material(
+                printer["id"],
+                payload,
+                cached_status=cached_status,
+            ),
             "filament_remaining_g": HISTORY.get_filament_remaining(printer["id"], DEFAULT_FILAMENT_REMAINING_G),
             "can_pause": state_upper in {"RUNNING", "PRINTING", "PREPARE", "PREPARING"},
             "can_resume": state_upper in {"PAUSE", "PAUSED"},
@@ -540,13 +569,14 @@ def _refresh_one_printer_metadata(printer: dict[str, Any]) -> None:
     _merge_status_cache(
         pid,
         nozzle_diameter=print_block.get("nozzle_diameter"),
+        loaded_material=_extract_loaded_material(status_payload),
         gcode_state=status_payload.get("gcode_state") or print_block.get("gcode_state"),
         file=print_block.get("subtask_name") or print_block.get("project_name") or print_block.get("gcode_file"),
         progress_percent=_safe_float(print_block.get("mc_percent")),
         current_layer=_safe_int(print_block.get("layer_num")),
         total_layers=_safe_int(print_block.get("total_layer_num")),
         remaining_time_min=_safe_int(print_block.get("mc_remaining_time")),
-    )
+    ) 
 
 
 def _run_printer_metadata_refresh(max_workers: int = DEFAULT_METADATA_WORKERS) -> None:
@@ -646,7 +676,12 @@ def _process_one_printer(
 
         def do_upload():
             with UPLOAD_SEM:
-                return upload_file_to_printer(ip, access_code, temp_path)
+                return upload_file_to_printer(
+                    ip,
+                    access_code,
+                    temp_path,
+                    model=printer.get("model") or "",
+                )
 
         retry(
             do_upload,
@@ -700,7 +735,12 @@ def _upload_only_one_printer(job_id: str, pid: str, printer: dict[str, Any], tem
 
         def do_upload():
             with UPLOAD_SEM:
-                return upload_file_to_printer(ip, access_code, temp_path)
+                return upload_file_to_printer(
+                    ip,
+                    access_code,
+                    temp_path,
+                    model=printer.get("model") or "",
+                )
 
         retry(
             do_upload,
@@ -1016,6 +1056,11 @@ def api_status():
         status = cache.get(pid, {"id": pid, "ok": None, "gcode_state": "NONE"})
         status = _normalize_runtime_status_for_printer(printer, status)
         status["model"] = printer.get("model")
+        status["loaded_material"] = _resolve_loaded_material(
+            pid,
+            cached_status=status,
+            fallback_value=status.get("loaded_material"),
+        )
         status["filament_remaining_g"] = HISTORY.get_filament_remaining(pid, DEFAULT_FILAMENT_REMAINING_G)
         status["last_printed"] = HISTORY.get_last_printed(pid)
         status["last_printed_ts"] = HISTORY.get_last_printed_ts(pid)
@@ -1140,6 +1185,39 @@ def api_printer_details(printer_id: str):
         status_payload = {"ok": False, "error": str(exc)}
 
     return jsonify(_build_printer_details(printer, status_payload, cached_status=cached_status))
+
+
+@app.post("/api/printers/<printer_id>/material")
+def api_set_printer_material(printer_id: str):
+    printer, error_response = _get_printer_or_error(printer_id)
+    if error_response:
+        return error_response
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "request body must be a JSON object"}), 400
+
+    material = str(data.get("material") or "").strip()
+    if len(material) > 120:
+        return jsonify({"error": "material must be at most 120 characters"}), 400
+
+    saved_override = HISTORY.set_material_override(printer["id"], material)
+    with STATUS_LOCK:
+        cached_status = deepcopy(STATUS_CACHE.get(printer["id"]))
+
+    effective_material = _resolve_loaded_material(
+        printer["id"],
+        cached_status=cached_status,
+    )
+
+    return jsonify(
+        {
+            "ok": True,
+            "printer_id": printer["id"],
+            "loaded_material": effective_material,
+            "material_override": saved_override,
+        }
+    )
 
 
 @app.post("/api/printers/<printer_id>/pause")

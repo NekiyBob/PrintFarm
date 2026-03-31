@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional
 import paho.mqtt.client as mqtt
 
 from filament_detector import LoadFilamentDetector
+from status_utils import extract_loaded_material_from_payload
 
 
 @dataclass(frozen=True)
@@ -204,6 +205,10 @@ class MqttStatusManager:
                 current_layer = pr.get("layer_num")
                 total_layers = pr.get("total_layer_num")
                 nozzle_diameter = pr.get("nozzle_diameter")
+                loaded_material = extract_loaded_material_from_payload(
+                    normalized,
+                    cached_status=previous,
+                )
                 file_hint = (
                     pr.get("subtask_name")
                     or pr.get("file")
@@ -240,7 +245,6 @@ class MqttStatusManager:
                     remaining_time = previous.get("remaining_time_min")
                 if not _has_value(nozzle_diameter):
                     nozzle_diameter = previous.get("nozzle_diameter")
-
                 hms_list = normalized.get("hms") or pr.get("hms") or []
                 print_error = pr.get("print_error") or previous.get("print_error")
 
@@ -276,6 +280,7 @@ class MqttStatusManager:
                     total_layers=total_layers,
                     remaining_time_min=remaining_time,
                     nozzle_diameter=nozzle_diameter,
+                    loaded_material=loaded_material,
                     hms=hms_codes,
                     print_error=print_error,
                     filament_load_event=filament_load_event,
@@ -323,6 +328,7 @@ class MqttStatusManager:
         total_layers=None,
         remaining_time_min=None,
         nozzle_diameter=None,
+        loaded_material=None,
         hms=None,
         print_error=None,
         filament_load_event: Optional[str] = None,
@@ -339,6 +345,7 @@ class MqttStatusManager:
             "total_layers": total_layers,
             "remaining_time_min": remaining_time_min,
             "nozzle_diameter": nozzle_diameter,
+            "loaded_material": loaded_material,
             "hms": hms or [],
             "print_error": print_error,
             "ts": time.time(),

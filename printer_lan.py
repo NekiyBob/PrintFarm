@@ -12,6 +12,24 @@ def _has_value(value: Any) -> bool:
     return value is not None and value != ""
 
 
+def _safe_int(value: Any) -> int | None:
+    try:
+        if value is None or value == "":
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _merge_non_empty(base: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any]:
     for key, value in incoming.items():
         if isinstance(value, dict):
@@ -47,6 +65,52 @@ def _report_has_rich_print_data(data: Dict[str, Any]) -> bool:
         "bed_target_temper",
     )
     return any(_has_value(pr.get(key)) for key in rich_keys)
+
+
+def _normalize_print_state(model: str, print_block: Dict[str, Any]) -> str | None:
+    state = str(print_block.get("gcode_state") or "").strip().upper()
+    if state:
+        return state
+
+    if str(model or "").strip().upper() == "P1S":
+        remaining_time = _safe_int(print_block.get("mc_remaining_time"))
+        progress_percent = _safe_float(print_block.get("mc_percent"))
+        if remaining_time is not None and remaining_time > 0:
+            return "RUNNING"
+        if progress_percent is not None and 0 < progress_percent < 100:
+            return "RUNNING"
+
+    return None
+
+
+def _print_has_started(model: str, print_block: Dict[str, Any]) -> bool:
+    state = _normalize_print_state(model, print_block)
+    return state in {"RUNNING", "PRINTING", "PREPARE", "PREPARING"}
+
+
+def _cleanup_mqtt_client(client: mqtt.Client) -> None:
+    try:
+        client.disconnect()
+    except Exception:
+        pass
+    try:
+        client.loop_stop()
+    except Exception:
+        pass
+
+
+def _publish_and_wait(
+    client: mqtt.Client,
+    topic: str,
+    payload: dict[str, Any],
+    *,
+    qos: int = 0,
+    timeout: float = 5.0,
+) -> None:
+    info = client.publish(topic, json.dumps(payload), qos=qos)
+    info.wait_for_publish(timeout=timeout)
+    if info.rc > 0:
+        raise RuntimeError(f"MQTT publish failed: rc={info.rc}")
 
 
 class Printer:
@@ -124,19 +188,11 @@ class Printer:
         client.loop_start()
 
         if not connected_evt.wait(connect_timeout):
-            try:
-                client.loop_stop()
-                client.disconnect()
-            except Exception:
-                pass
+            _cleanup_mqtt_client(client)
             raise RuntimeError("MQTT connect timeout")
 
         if connect_error["value"]:
-            try:
-                client.loop_stop()
-                client.disconnect()
-            except Exception:
-                pass
+            _cleanup_mqtt_client(client)
             raise RuntimeError(connect_error["value"])
 
         return client, connected_evt
@@ -174,8 +230,12 @@ class Printer:
                 detailed_evt.wait(min(2.5, remaining))
 
             report = merged_report or last_report
-            pr = report.get("print", {})
-            gcode_state = pr.get("gcode_state")
+            pr = dict(report.get("print", {}) or {})
+            gcode_state = _normalize_print_state(self.model, pr)
+            if gcode_state and not pr.get("gcode_state"):
+                pr["gcode_state"] = gcode_state
+                report = dict(report)
+                report["print"] = pr
             return {
                 "ok": True,
                 "gcode_state": gcode_state,
@@ -183,8 +243,7 @@ class Printer:
                 "report": report,
             }
         finally:
-            client.loop_stop()
-            client.disconnect()
+            _cleanup_mqtt_client(client)
 
     def pause(self, timeout: float = 15.0) -> bool:
         """
@@ -211,8 +270,7 @@ class Printer:
         try:
             # pause с sequence_id (важно)
             cmd = {"print": {"sequence_id": "0", "command": "pause"}}
-            info = client.publish(topic_request, json.dumps(cmd), qos=0)
-            info.wait_for_publish()
+            _publish_and_wait(client, topic_request, cmd, qos=0)
 
             if paused_evt.wait(timeout):
                 return True
@@ -220,8 +278,7 @@ class Printer:
             return False
 
         finally:
-            client.loop_stop()
-            client.disconnect()
+            _cleanup_mqtt_client(client)
 
     def resume(self, timeout: float = 15.0) -> bool:
         """
@@ -247,8 +304,7 @@ class Printer:
 
         try:
             cmd = {"print": {"sequence_id": "0", "command": "resume"}}
-            info = client.publish(topic_request, json.dumps(cmd), qos=0)
-            info.wait_for_publish()
+            _publish_and_wait(client, topic_request, cmd, qos=0)
 
             if resumed_evt.wait(timeout):
                 return True
@@ -256,8 +312,7 @@ class Printer:
             return False
 
         finally:
-            client.loop_stop()
-            client.disconnect()
+            _cleanup_mqtt_client(client)
 
     def stop(self, timeout: float = 15.0) -> bool:
         """
@@ -278,14 +333,12 @@ class Printer:
 
         try:
             cmd = {"print": {"sequence_id": "0", "command": "stop"}}
-            info = client.publish(topic_request, json.dumps(cmd), qos=0)
-            info.wait_for_publish()
+            _publish_and_wait(client, topic_request, cmd, qos=0)
 
             return stopped_evt.wait(timeout)
 
         finally:
-            client.loop_stop()
-            client.disconnect()
+            _cleanup_mqtt_client(client)
 
     def start_print(
         self,
@@ -308,9 +361,9 @@ class Printer:
         started_evt = threading.Event()
 
         def on_report(data: Dict[str, Any]):
-            pr = data.get("print", {}) or {}
-            st = pr.get("gcode_state")
-            if st and str(st).upper() in ("RUNNING", "PRINTING"):
+            normalized = _normalize_report_payload(data)
+            pr = normalized.get("print", {}) or {}
+            if _print_has_started(self.model, pr):
                 started_evt.set()
 
             # текст ошибки в консоли
@@ -339,8 +392,7 @@ class Printer:
                 }
 
                 print("[MQTT SEND]", cmd)
-                info = client.publish(topic_request, json.dumps(cmd), qos=1)
-                info.wait_for_publish()
+                _publish_and_wait(client, topic_request, cmd, qos=1)
                 return started_evt.wait(timeout)
 
             # =========================
@@ -373,13 +425,11 @@ class Printer:
             cmd = {"print": base_print}
 
             print("[MQTT SEND]", cmd)
-            info = client.publish(topic_request, json.dumps(cmd), qos=1)
-            info.wait_for_publish()
+            _publish_and_wait(client, topic_request, cmd, qos=1)
             return started_evt.wait(timeout)
 
         finally:
-            client.loop_stop()
-            client.disconnect()
+            _cleanup_mqtt_client(client)
 
 
 

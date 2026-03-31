@@ -76,6 +76,25 @@ class PrinterHistory:
                 return self._coerce_grams(default, 1000.0)
             return self._coerce_grams(current, default)
 
+    def get_material_override(self, pid: str) -> Optional[str]:
+        with self._lock:
+            value = (self._data.get(pid) or {}).get("loaded_material_override")
+            if value is None:
+                return None
+            normalized = str(value).strip()
+            return normalized or None
+
+    def set_material_override(self, pid: str, material: Optional[str]) -> Optional[str]:
+        normalized = str(material or "").strip()
+        with self._lock:
+            rec = self._data.setdefault(pid, {})
+            if normalized:
+                rec["loaded_material_override"] = normalized
+            else:
+                rec.pop("loaded_material_override", None)
+            self._atomic_save()
+            return normalized or None
+
     def set_filament_remaining(self, pid: str, grams: float) -> float:
         remaining = self._coerce_grams(grams, 0.0)
         with self._lock:

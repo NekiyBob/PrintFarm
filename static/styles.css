@@ -321,9 +321,77 @@ body.selection-mode .rack-title {
   font-size: 10px;
   line-height: 1.1;
   color: #64748b;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.printer-btn-model {
+  min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.printer-btn-main-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.printer-btn-side-meta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.printer-nozzle-label {
+  color: #475569;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.printer-material-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 84px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid transparent;
+}
+
+.printer-material-badge.is-orange {
+  background: #9e9d9d;
+  color: #0e0d0d;
+  border-color: #1a1714;
+}
+
+.printer-material-badge.is-green {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #86efac;
+}
+
+.printer-material-badge.is-blue {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #93c5fd;
 }
 
 body.selection-mode .printer-btn:not(:disabled) {
@@ -566,6 +634,88 @@ body.drawer-open .details-drawer {
   font-size: 14px;
   font-weight: 700;
   word-break: break-word;
+}
+
+.meta-item-material {
+  display: grid;
+  gap: 6px;
+}
+
+.meta-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.meta-label-row .meta-label {
+  margin-bottom: 0;
+}
+
+.material-label-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #dbe4f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #64748b;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.material-label-edit-btn:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.material-inline-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.material-inline-trigger:hover .printer-material-badge,
+.material-inline-trigger:hover .material-inline-placeholder {
+  filter: brightness(0.98);
+}
+
+.material-inline-placeholder {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px dashed #cbd5e1;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.material-inline-form {
+  display: grid;
+  gap: 8px;
+}
+
+.material-inline-input {
+  min-width: 0;
+  width: 100%;
+}
+
+.material-inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .progress-card {

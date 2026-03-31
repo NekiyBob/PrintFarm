@@ -10,6 +10,7 @@ const appState = {
   detailsRefreshTimer: null,
   drawerActionPending: false,
   maintenanceByPrinter: new Map(),
+  materialEditorByPrinter: new Map(),
 };
 
 const MAINTENANCE_EVENT_OPTIONS = [
@@ -62,11 +63,66 @@ function hasStatusValue(value) {
   return value !== null && value !== undefined && value !== "";
 }
 
+function normalizeMaterialValue(value) {
+  if (!hasStatusValue(value)) return "";
+  const normalized = String(value).trim();
+  return normalized === "—" ? "" : normalized;
+}
+
+function createDefaultMaterialEditorState(currentValue = "") {
+  return {
+    isEditing: false,
+    draft: normalizeMaterialValue(currentValue),
+    saving: false,
+    message: "",
+    messageKind: "",
+    messageTimeoutId: null,
+  };
+}
+
+function getMaterialEditorState(printerId, currentValue = "") {
+  let state = appState.materialEditorByPrinter.get(printerId);
+  if (!state) {
+    state = createDefaultMaterialEditorState(currentValue);
+    appState.materialEditorByPrinter.set(printerId, state);
+    return state;
+  }
+
+  if (!state.isEditing && !state.saving) {
+    state.draft = normalizeMaterialValue(currentValue);
+  }
+
+  return state;
+}
+
+function clearMaterialEditorMessageTimer(state) {
+  if (!state?.messageTimeoutId) return;
+  clearTimeout(state.messageTimeoutId);
+  state.messageTimeoutId = null;
+}
+
+function scheduleMaterialEditorMessageClear(printerId, delayMs = 5000) {
+  const state = getMaterialEditorState(printerId);
+  clearMaterialEditorMessageTimer(state);
+  state.messageTimeoutId = setTimeout(() => {
+    const currentState = appState.materialEditorByPrinter.get(printerId);
+    if (!currentState) return;
+    currentState.message = "";
+    currentState.messageKind = "";
+    currentState.messageTimeoutId = null;
+
+    if (appState.drawerPrinterId === printerId && appState.drawerTab === "general" && appState.drawerDetails) {
+      renderPrinterDetails(appState.drawerDetails);
+    }
+  }, delayMs);
+}
+
 function createDefaultMaintenanceDraft() {
   return {
     eventType: "NOZZLE_REPLACEMENT",
     nozzleDiameter: "0.4",
     customTypeName: "",
+    printHours: "",
     note: "",
   };
 }
@@ -155,6 +211,10 @@ function startDetailsAutoRefresh() {
       return;
     }
     if (appState.drawerTab === "maintenance") {
+      return;
+    }
+    const materialEditorState = appState.materialEditorByPrinter.get(appState.drawerPrinterId);
+    if (materialEditorState?.isEditing || materialEditorState?.saving) {
       return;
     }
     loadPrinterDetails(appState.drawerPrinterId, { silent: true });
@@ -255,7 +315,7 @@ function buildPrinterButtonContent(printer) {
 
   const meta = document.createElement("span");
   meta.className = "printer-btn-meta";
-  meta.textContent = printer.model || "";
+  meta.innerHTML = buildPrinterCardMeta(printer.model || "", "", "");
 
   top.appendChild(id);
   top.appendChild(progress);
@@ -385,7 +445,7 @@ function applyStatusClass(btn, status) {
   if (!status) {
     btn.style.setProperty("--progress", "0");
     if (fileEl) fileEl.textContent = "";
-    if (metaEl) metaEl.textContent = model;
+    if (metaEl) metaEl.innerHTML = buildPrinterCardMeta(model, "", "");
     if (progressEl) progressEl.textContent = "";
     return;
   }
@@ -395,6 +455,7 @@ function applyStatusClass(btn, status) {
   const state = (status.gcode_state || "").toUpperCase();
   const fileName = shortFileName(status.file);
   const nozzleDiameter = hasStatusValue(status.nozzle_diameter) ? String(status.nozzle_diameter) : "";
+  const loadedMaterial = hasStatusValue(status.loaded_material) ? String(status.loaded_material) : "";
 
   const showFill = state === "RUNNING" || state === "PRINTING";
   const showProgress = showFill || state === "PAUSE" || state === "PAUSED";
@@ -404,7 +465,7 @@ function applyStatusClass(btn, status) {
     fileEl.textContent = fileName || "";
   }
   if (metaEl) {
-    metaEl.textContent = [model, nozzleDiameter].filter(Boolean).join(" ");
+    metaEl.innerHTML = buildPrinterCardMeta(model, nozzleDiameter, loadedMaterial);
   }
   if (progressEl) {
     progressEl.textContent = showProgress && hasProgress ? formatPercent(progress) : "";
@@ -431,6 +492,54 @@ function applyStatusClass(btn, status) {
   } else if (state === "FINISH" && status.finish_recent) {
     btn.classList.add("st-finish");
   }
+}
+
+function buildPrinterCardMeta(model, nozzleDiameter, loadedMaterial) {
+  const safeModel = escapeHtml(model || "");
+  const nozzleLabel = nozzleDiameter
+    ? `<span class="printer-nozzle-label">${escapeHtml(nozzleDiameter)}</span>`
+    : "";
+  const materialBadge = buildPrinterMaterialBadge(loadedMaterial);
+
+  return `
+    <span class="printer-btn-main-meta">
+      <span class="printer-btn-model">${safeModel}</span>
+      ${nozzleLabel}
+    </span>
+    <span class="printer-btn-side-meta">${materialBadge}</span>
+  `;
+}
+
+function buildPrinterMaterialBadge(materialValue) {
+  if (!hasStatusValue(materialValue)) return "";
+
+  const materialText = String(materialValue).trim();
+  if (!materialText) return "";
+
+  const materialUpper = materialText.toUpperCase();
+  let tone = "is-blue";
+  if (materialUpper.includes("PA-CF")) {
+    tone = "is-orange";
+  } else if (materialUpper.includes("PETG")) {
+    tone = "is-green";
+  }
+
+  return `<span class="printer-material-badge ${tone}">${escapeHtml(materialText)}</span>`;
+}
+
+function updatePrinterMaterialInUi(printerId, loadedMaterial) {
+  const currentStatus = appState.statusMap.get(printerId) || { id: printerId };
+  const nextStatus = {
+    ...currentStatus,
+    loaded_material: normalizeMaterialValue(loadedMaterial) || null,
+  };
+  appState.statusMap.set(printerId, nextStatus);
+
+  document.querySelectorAll(".printer-btn").forEach((btn) => {
+    if (btn.dataset.printerId === printerId) {
+      applyStatusClass(btn, nextStatus);
+    }
+  });
 }
 
 async function refreshStatuses() {
@@ -886,6 +995,16 @@ function formatMaintenanceNozzleLabel(value) {
   return `${numeric.toFixed(1)} мм`;
 }
 
+function formatMaintenancePrintHoursLabel(value) {
+  if (!hasStatusValue(value)) return "—";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return `${value} ч`;
+  return `${new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(numeric)} ч`;
+}
+
 function buildPrettySelect(fieldName, value, options, { disabled = false } = {}) {
   const selectedOption = options.find((option) => option.value === value) || options[0] || null;
   const stateClass = disabled ? " is-disabled" : "";
@@ -924,7 +1043,7 @@ function buildGeneralDetailsTab(details) {
   const fileName = status.is_active_print ? status.current_file || "Не удалось определить" : "Сейчас не печатает";
   const stateText = status.gcode_state || status.error || "Нет данных";
   const nozzleDiameter = status.nozzle_diameter || "—";
-  const loadedMaterial = status.loaded_material || "—";
+  const loadedMaterial = normalizeMaterialValue(status.loaded_material);
   const filamentRemaining = hasStatusValue(status.filament_remaining_g)
     ? formatValue(status.filament_remaining_g, " г")
     : "—";
@@ -932,6 +1051,14 @@ function buildGeneralDetailsTab(details) {
   const primaryActionLabel = status.can_resume ? "Возобновить" : "Пауза";
   const primaryDisabled = (!status.can_pause && !status.can_resume) || appState.drawerActionPending ? "disabled" : "";
   const stopDisabled = !status.can_stop || appState.drawerActionPending ? "disabled" : "";
+  const materialEditorState = getMaterialEditorState(details.id, loadedMaterial);
+  const materialStatusClass = materialEditorState.messageKind
+    ? ` drawer-inline-status is-${materialEditorState.messageKind}`
+    : " drawer-inline-status";
+  const materialValueMarkup = loadedMaterial
+    ? buildPrinterMaterialBadge(loadedMaterial)
+    : '<span class="material-inline-placeholder">Не указан</span>';
+  const materialDisabled = materialEditorState.saving ? "disabled" : "";
 
   return `
     <section class="drawer-section">
@@ -957,9 +1084,48 @@ function buildGeneralDetailsTab(details) {
           <span class="meta-label">Диаметр сопла</span>
           <span class="meta-value">${escapeHtml(nozzleDiameter)}</span>
         </div>
-        <div class="meta-item">
-          <span class="meta-label">Материал</span>
-          <span class="meta-value">${escapeHtml(loadedMaterial)}</span>
+        <div class="meta-item meta-item-material">
+          <div class="meta-label-row">
+            <span class="meta-label">Материал</span>
+            ${materialEditorState.isEditing ? "" : `
+              <button
+                type="button"
+                class="material-label-edit-btn"
+                data-material-edit
+                aria-label="Изменить материал"
+                title="Изменить материал"
+              >
+                <span aria-hidden="true">✎</span>
+              </button>
+            `}
+          </div>
+          ${materialEditorState.isEditing ? `
+            <form id="material-editor-form" class="material-inline-form" autocomplete="off">
+              <input
+                type="text"
+                name="material_value"
+                class="input material-inline-input"
+                placeholder="Например, PA-CF"
+                value="${escapeHtml(materialEditorState.draft)}"
+                autocomplete="off"
+                autocapitalize="off"
+                autocorrect="off"
+                spellcheck="false"
+                data-lpignore="true"
+                ${materialDisabled}
+              />
+              <div class="material-inline-actions">
+                <button type="submit" class="btn btn-small btn-primary" ${materialDisabled}>Сохранить</button>
+                <button type="button" class="btn btn-small" data-material-cancel ${materialDisabled}>Отмена</button>
+              </div>
+              <div id="material-editor-status" class="${materialStatusClass.trim()}">${escapeHtml(materialEditorState.message || "")}</div>
+            </form>
+          ` : `
+            <button type="button" class="material-inline-trigger" data-material-edit>
+              ${materialValueMarkup}
+            </button>
+            <div id="material-editor-status" class="${materialStatusClass.trim()}">${escapeHtml(materialEditorState.message || "")}</div>
+          `}
         </div>
         <div class="meta-item">
           <span class="meta-label">Остаток пластика</span>
@@ -1062,6 +1228,21 @@ function buildMaintenanceForm(printerId) {
         ` : ""}
 
         <label class="maintenance-field">
+          <span class="maintenance-label">Часы на принтере</span>
+          <input
+            type="number"
+            name="print_hours_snapshot"
+            class="input maintenance-input"
+            min="0"
+            step="0.01"
+            inputmode="decimal"
+            placeholder=""
+            value="${escapeHtml(draft.printHours)}"
+            ${disabled}
+          />
+        </label>
+
+        <label class="maintenance-field">
           <span class="maintenance-label">Комментарий</span>
           <textarea
             name="note"
@@ -1111,6 +1292,12 @@ function buildMaintenanceHistory(printerId) {
                 <strong>${escapeHtml(formatMaintenanceNozzleLabel(item.nozzle_diameter))}</strong>
               </div>
             ` : ""}
+            ${hasStatusValue(item.print_hours_snapshot) ? `
+              <div class="maintenance-entry-row">
+                <span class="maintenance-entry-label">Часы на принтере</span>
+                <strong>${escapeHtml(formatMaintenancePrintHoursLabel(item.print_hours_snapshot))}</strong>
+              </div>
+            ` : ""}
             <div class="maintenance-entry-row maintenance-entry-row-comment">
               <span class="maintenance-entry-label">Комментарий</span>
               <span class="maintenance-entry-comment">${formatMaintenanceComment(item.note)}</span>
@@ -1144,10 +1331,120 @@ function bindFinalDrawerTabs(content) {
   });
 }
 
-function bindFinalGeneralActions(content) {
+function bindFinalGeneralActions(content, details) {
   content.querySelectorAll("[data-printer-action]").forEach((button) => {
     button.addEventListener("click", () => runPrinterAction(button.dataset.printerAction));
   });
+
+  const printerId = details.id;
+  const materialState = getMaterialEditorState(printerId, details.status?.loaded_material || "");
+
+  content.querySelectorAll("[data-material-edit]").forEach((materialEditButton) => {
+    materialEditButton.addEventListener("click", () => {
+      clearMaterialEditorMessageTimer(materialState);
+      materialState.isEditing = true;
+      materialState.draft = normalizeMaterialValue(details.status?.loaded_material || "");
+      materialState.message = "";
+      materialState.messageKind = "";
+      renderPrinterDetails(appState.drawerDetails || details);
+      requestAnimationFrame(() => {
+        const input = document.querySelector('#material-editor-form [name="material_value"]');
+        if (input) {
+          input.focus();
+          input.select();
+        }
+      });
+    });
+  });
+
+  const materialCancelButton = content.querySelector("[data-material-cancel]");
+  if (materialCancelButton) {
+    materialCancelButton.addEventListener("click", () => {
+      clearMaterialEditorMessageTimer(materialState);
+      materialState.isEditing = false;
+      materialState.saving = false;
+      materialState.draft = normalizeMaterialValue(details.status?.loaded_material || "");
+      materialState.message = "";
+      materialState.messageKind = "";
+      renderPrinterDetails(appState.drawerDetails || details);
+    });
+  }
+
+  const materialForm = content.querySelector("#material-editor-form");
+  if (materialForm) {
+    const materialInput = materialForm.querySelector('[name="material_value"]');
+    if (materialInput) {
+      materialInput.addEventListener("input", () => {
+        clearMaterialEditorMessageTimer(materialState);
+        materialState.message = "";
+        materialState.messageKind = "";
+        materialState.draft = materialInput.value;
+      });
+    }
+
+    materialForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await submitPrinterMaterial(printerId);
+    });
+  }
+}
+
+async function submitPrinterMaterial(printerId) {
+  const state = getMaterialEditorState(
+    printerId,
+    appState.drawerDetails?.status?.loaded_material || "",
+  );
+  if (state.saving) return;
+
+  clearMaterialEditorMessageTimer(state);
+  state.saving = true;
+  state.message = "Сохраняем материал...";
+  state.messageKind = "";
+
+  if (appState.drawerPrinterId === printerId && appState.drawerDetails) {
+    renderPrinterDetails(appState.drawerDetails);
+  }
+
+  try {
+    const resp = await fetch(`/api/printers/${encodeURIComponent(printerId)}/material`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ material: state.draft.trim() }),
+    });
+    const data = await resp.json().catch(async () => ({ error: await resp.text() }));
+    if (!resp.ok) {
+      throw new Error(data.error || "Не удалось сохранить материал");
+    }
+
+    const loadedMaterial = normalizeMaterialValue(data.loaded_material);
+    const savedOverride = normalizeMaterialValue(data.material_override);
+    state.isEditing = false;
+    state.draft = loadedMaterial;
+    state.message = savedOverride ? "Материал сохранён." : "Ручное значение очищено.";
+    state.messageKind = "success";
+    scheduleMaterialEditorMessageClear(printerId, 5000);
+
+    if (appState.drawerDetails?.id === printerId) {
+      appState.drawerDetails = {
+        ...appState.drawerDetails,
+        status: {
+          ...(appState.drawerDetails.status || {}),
+          loaded_material: loadedMaterial || null,
+        },
+      };
+    }
+
+    updatePrinterMaterialInUi(printerId, loadedMaterial);
+  } catch (e) {
+    state.message = `Ошибка: ${e.message}`;
+    state.messageKind = "error";
+  } finally {
+    state.saving = false;
+
+    if (appState.drawerPrinterId === printerId && appState.drawerDetails) {
+      renderPrinterDetails(appState.drawerDetails);
+    }
+  }
 }
 
 function bindMaintenanceFormControls(content, details) {
@@ -1203,6 +1500,14 @@ function bindMaintenanceFormControls(content, details) {
     noteField.addEventListener("input", () => {
       clearFormMessage();
       state.draft.note = noteField.value;
+    });
+  }
+
+  const printHoursField = form.querySelector('[name="print_hours_snapshot"]');
+  if (printHoursField) {
+    printHoursField.addEventListener("input", () => {
+      clearFormMessage();
+      state.draft.printHours = printHoursField.value.replace(",", ".");
     });
   }
 
@@ -1263,11 +1568,16 @@ async function submitMaintenanceRecord(printerId) {
     renderPrinterDetails(appState.drawerDetails);
   }
 
+  const normalizedPrintHours = (state.draft.printHours || "").trim();
   const payload = {
     event_type: state.draft.eventType,
     performed_by: MAINTENANCE_PERFORMED_BY_PLACEHOLDER,
     note: state.draft.note.trim(),
   };
+
+  if (normalizedPrintHours !== "") {
+    payload.print_hours_snapshot = normalizedPrintHours;
+  }
 
   if (state.draft.eventType === "NOZZLE_REPLACEMENT") {
     payload.nozzle_diameter = state.draft.nozzleDiameter || "0.4";
@@ -1360,7 +1670,7 @@ function renderPrinterDetails(details) {
   bindFinalDrawerTabs(content);
 
   if (generalTabActive) {
-    bindFinalGeneralActions(content);
+    bindFinalGeneralActions(content, details);
   }
 
   if (maintenanceTabActive) {
