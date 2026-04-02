@@ -7,3 +7,9 @@ TESTS/
 __pycache__/
 MqttTest.py
 printer_history.json
+test_nozzle_diameter.py
+test_printer_client.py
+test_printer_lan.py
+test_printer_client.py
+test_status_utils.py
+getGrammTest.py

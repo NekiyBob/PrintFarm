@@ -40,6 +40,8 @@ JOB_RETENTION_SEC = 6 * 60 * 60
 FINISH_HIGHLIGHT_SEC = 15 * 60
 MQTT_OFFLINE_AFTER_SEC = 180.0
 DEFAULT_FILAMENT_REMAINING_G = 1000
+DEFAULT_P1S_NOZZLE_DIAMETER = "0.4"
+P1S_NOZZLE_DIAMETER_OPTIONS = ("0.2", "0.4", "0.6", "0.8")
 
 UPLOAD_SEM = threading.Semaphore(UPLOAD_CONCURRENCY)
 RESTART_SEM = threading.Semaphore(RESTART_CONCURRENCY)
@@ -223,6 +225,66 @@ def _resolve_loaded_material(
     )
 
 
+def _normalize_nozzle_diameter_value(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+
+    normalized = str(value).strip().replace(",", ".")
+    if not normalized or normalized == "—":
+        return None
+
+    try:
+        return f"{float(normalized):.1f}"
+    except (TypeError, ValueError):
+        return normalized
+
+
+def _resolve_nozzle_diameter_value(
+    model: str,
+    *,
+    reported_value: Any = None,
+    override_value: Any = None,
+    fallback_value: Any = None,
+) -> Optional[str]:
+    normalized_model = str(model or "").strip().upper()
+    normalized_reported = _normalize_nozzle_diameter_value(reported_value)
+    normalized_fallback = _normalize_nozzle_diameter_value(fallback_value)
+
+    if normalized_model == "P1S":
+        normalized_override = _normalize_nozzle_diameter_value(override_value)
+        return normalized_override or normalized_reported or normalized_fallback or DEFAULT_P1S_NOZZLE_DIAMETER
+
+    return normalized_reported or normalized_fallback
+
+
+def _resolve_nozzle_diameter(
+    printer: dict[str, Any],
+    payload: Optional[dict[str, Any]] = None,
+    *,
+    cached_status: Optional[dict[str, Any]] = None,
+    fallback_value: Any = None,
+) -> Optional[str]:
+    payload = payload or {}
+    print_block = payload.get("print") or {}
+    cached_status = cached_status or {}
+
+    reported_value = _coalesce(
+        print_block.get("nozzle_diameter"),
+        payload.get("nozzle_diameter"),
+    )
+    cached_value = _coalesce(
+        cached_status.get("nozzle_diameter"),
+        fallback_value,
+    )
+
+    return _resolve_nozzle_diameter_value(
+        printer.get("model") or "",
+        reported_value=reported_value,
+        override_value=HISTORY.get_nozzle_diameter_override(printer["id"]),
+        fallback_value=cached_value,
+    )
+
+
 def _is_recent_finish(status: dict[str, Any], last_printed_ts: Optional[float], now: Optional[float] = None) -> bool:
     if str(status.get("gcode_state") or "").upper() != "FINISH":
         return False
@@ -271,7 +333,11 @@ def _build_printer_details(
             "nozzle_target_temp": _safe_float(print_block.get("nozzle_target_temper")),
             "bed_temp": _safe_float(print_block.get("bed_temper")),
             "bed_target_temp": _safe_float(print_block.get("bed_target_temper")),
-            "nozzle_diameter": print_block.get("nozzle_diameter"),
+            "nozzle_diameter": _resolve_nozzle_diameter(
+                printer,
+                payload,
+                cached_status=cached_status,
+            ),
             "loaded_material": _resolve_loaded_material(
                 printer["id"],
                 payload,
@@ -1056,6 +1122,11 @@ def api_status():
         status = cache.get(pid, {"id": pid, "ok": None, "gcode_state": "NONE"})
         status = _normalize_runtime_status_for_printer(printer, status)
         status["model"] = printer.get("model")
+        status["nozzle_diameter"] = _resolve_nozzle_diameter(
+            printer,
+            cached_status=status,
+            fallback_value=status.get("nozzle_diameter"),
+        )
         status["loaded_material"] = _resolve_loaded_material(
             pid,
             cached_status=status,
@@ -1216,6 +1287,43 @@ def api_set_printer_material(printer_id: str):
             "printer_id": printer["id"],
             "loaded_material": effective_material,
             "material_override": saved_override,
+        }
+    )
+
+
+@app.post("/api/printers/<printer_id>/nozzle_diameter")
+def api_set_printer_nozzle_diameter(printer_id: str):
+    printer, error_response = _get_printer_or_error(printer_id)
+    if error_response:
+        return error_response
+
+    if str(printer.get("model") or "").strip().upper() != "P1S":
+        return jsonify({"error": "nozzle_diameter_override_supported_only_for_p1s"}), 400
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "request body must be a JSON object"}), 400
+
+    nozzle_diameter = _normalize_nozzle_diameter_value(data.get("nozzle_diameter"))
+    if nozzle_diameter not in P1S_NOZZLE_DIAMETER_OPTIONS:
+        allowed = ", ".join(P1S_NOZZLE_DIAMETER_OPTIONS)
+        return jsonify({"error": f"nozzle_diameter must be one of: {allowed}"}), 400
+
+    saved_override = HISTORY.set_nozzle_diameter_override(printer["id"], nozzle_diameter)
+    with STATUS_LOCK:
+        cached_status = deepcopy(STATUS_CACHE.get(printer["id"]))
+
+    effective_nozzle_diameter = _resolve_nozzle_diameter(
+        printer,
+        cached_status=cached_status,
+    )
+
+    return jsonify(
+        {
+            "ok": True,
+            "printer_id": printer["id"],
+            "nozzle_diameter": effective_nozzle_diameter,
+            "nozzle_diameter_override": saved_override,
         }
     )
 
@@ -1453,6 +1561,11 @@ def api_mqtt_restart():
 
 
 if __name__ == "__main__":
+    import os
+    from werkzeug.middleware.proxy_fix import ProxyFix
+
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
     debug_mode = True
 
     if not debug_mode or os.environ.get("WERKZEUG_RUN_MAIN") == "true":

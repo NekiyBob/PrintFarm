@@ -95,6 +95,25 @@ class PrinterHistory:
             self._atomic_save()
             return normalized or None
 
+    def get_nozzle_diameter_override(self, pid: str) -> Optional[str]:
+        with self._lock:
+            value = (self._data.get(pid) or {}).get("nozzle_diameter_override")
+            if value is None:
+                return None
+            normalized = str(value).strip()
+            return normalized or None
+
+    def set_nozzle_diameter_override(self, pid: str, nozzle_diameter: Optional[str]) -> Optional[str]:
+        normalized = str(nozzle_diameter or "").strip()
+        with self._lock:
+            rec = self._data.setdefault(pid, {})
+            if normalized:
+                rec["nozzle_diameter_override"] = normalized
+            else:
+                rec.pop("nozzle_diameter_override", None)
+            self._atomic_save()
+            return normalized or None
+
     def set_filament_remaining(self, pid: str, grams: float) -> float:
         remaining = self._coerce_grams(grams, 0.0)
         with self._lock:

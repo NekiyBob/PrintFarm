@@ -15,9 +15,12 @@ context.verify_mode = ssl.CERT_NONE
 DEFAULT_TRANSFER_TIMEOUT_SEC = 180
 P1S_TRANSFER_TIMEOUT_SEC = 300
 P1S_CONTROL_TIMEOUT_SEC = 300
-P1S_BLOCKSIZE = 32 * 1024
+DEFAULT_BLOCKSIZE = 256 * 1024
+P1S_FAST_BLOCKSIZE = 128 * 1024
+P1S_SAFE_BLOCKSIZE = 32 * 1024
 
 START_CONFIRMED_STATES = {"RUNNING", "PRINTING", "PREPARE", "PREPARING"}
+FTPS_ERRORS = (socket.timeout, ssl.SSLError, *ftplib.all_errors)
 
 
 class ImplicitFTP_TLS(ftplib.FTP_TLS):
@@ -80,6 +83,18 @@ def _storbinary_without_unwrap(ftps, cmd, fp, blocksize=8192, callback=None, res
     return ftps.voidresp()
 
 
+def _get_upload_blocksize_candidates(model: str, requested_blocksize: int) -> tuple[int, ...]:
+    normalized_model = str(model or "").strip().upper()
+    if normalized_model != "P1S":
+        return (requested_blocksize,)
+
+    candidates = []
+    for size in (P1S_FAST_BLOCKSIZE, P1S_SAFE_BLOCKSIZE):
+        if size not in candidates:
+            candidates.append(size)
+    return tuple(candidates)
+
+
 def start_print_on_printer(
     ip: str,
     access_code: str,
@@ -122,74 +137,103 @@ def upload_file_to_printer(
     local_path: str,
     remote_dir: str = "/",
     user: str = "bblp",
-    blocksize=256 * 1024,
+    blocksize=DEFAULT_BLOCKSIZE,
     model: str = "",
 ):
-    ftps = None
-    try:
-        normalized_model = str(model or "").strip().upper()
-        is_p1s = normalized_model == "P1S"
+    normalized_model = str(model or "").strip().upper()
+    is_p1s = normalized_model == "P1S"
+    filename = os.path.basename(local_path)
+    filesize = os.path.getsize(local_path)
+    blocksize_candidates = _get_upload_blocksize_candidates(normalized_model, blocksize)
+    last_error = None
 
-        ftps = ImplicitFTP_TLS()
-        ftps.connect(host=host, port=990, timeout=20)
-        ftps.login(user=user, passwd=password)
-        ftps.prot_p()
-        if is_p1s:
-            ftps._transfer_timeout = P1S_TRANSFER_TIMEOUT_SEC
-            ftps.sock.settimeout(P1S_CONTROL_TIMEOUT_SEC)
-            blocksize = P1S_BLOCKSIZE
-        else:
-            ftps.sock.settimeout(180)
+    for attempt_index, active_blocksize in enumerate(blocksize_candidates, start=1):
+        ftps = None
+        upload_started_at = time.monotonic()
 
-        if remote_dir:
-            ftps.cwd(remote_dir)
-
-        filename = os.path.basename(local_path)
-        filesize = os.path.getsize(local_path)
-
-        print(f"Загрузка '{filename}' ({filesize/1024/1024:.2f} MB)...")
-
-        bytes_sent = 0
-        last_update = 0
-
-        def handle_block(block):
-            nonlocal bytes_sent, last_update
-            bytes_sent += len(block)
-            now = time.time()
-            if now - last_update > 3:
-                percent = bytes_sent / filesize * 100
-                print(f"\n[{host}] Прогресс: {percent:6.2f}%\n", flush=True)
-
-                last_update = now
-
-        # Таймауты лучше больше.
-        if not is_p1s:
-            ftps.sock.settimeout(120)
-
-        with open(local_path, "rb") as f:
+        try:
+            ftps = ImplicitFTP_TLS()
+            ftps.connect(host=host, port=990, timeout=20)
+            ftps.login(user=user, passwd=password)
+            ftps.prot_p()
             if is_p1s:
-                resp = _storbinary_without_unwrap(ftps, f"STOR {filename}", f, blocksize, callback=handle_block)
+                ftps._transfer_timeout = P1S_TRANSFER_TIMEOUT_SEC
+                ftps.sock.settimeout(P1S_CONTROL_TIMEOUT_SEC)
             else:
-                resp = ftps.storbinary(f"STOR {filename}", f, blocksize, callback=handle_block)
+                ftps.sock.settimeout(180)
 
-        print("\nЗагрузка завершена! FTP:", resp)
+            if remote_dir:
+                ftps.cwd(remote_dir)
 
-        # Проверка результата.
-        if not resp or not str(resp).startswith("226"):
-            raise RuntimeError(f"FTP upload failed, server reply: {resp}")
+            size_mb = filesize / 1024 / 1024
+            print(
+                f"Загрузка '{filename}' ({size_mb:.2f} MB)"
+                f" blocksize={active_blocksize // 1024} KB..."
+            )
 
-        return resp
+            bytes_sent = 0
+            last_update = 0
 
-    except (socket.timeout, ssl.SSLError, *ftplib.all_errors) as e:
-        raise RuntimeError(f"FTPS upload error: {e}") from e
+            def handle_block(block):
+                nonlocal bytes_sent, last_update
+                bytes_sent += len(block)
+                now = time.time()
+                if now - last_update > 3:
+                    percent = bytes_sent / filesize * 100
+                    print(f"\n[{host}] Прогресс: {percent:6.2f}%\n", flush=True)
+                    last_update = now
 
-    finally:
-        if ftps:
-            try:
-                if ftps.sock:
-                    ftps.quit()
-            except Exception:
+            # Таймауты лучше больше.
+            if not is_p1s:
+                ftps.sock.settimeout(120)
+
+            with open(local_path, "rb") as f:
+                if is_p1s:
+                    resp = _storbinary_without_unwrap(
+                        ftps,
+                        f"STOR {filename}",
+                        f,
+                        active_blocksize,
+                        callback=handle_block,
+                    )
+                else:
+                    resp = ftps.storbinary(
+                        f"STOR {filename}",
+                        f,
+                        active_blocksize,
+                        callback=handle_block,
+                    )
+
+            elapsed = max(time.monotonic() - upload_started_at, 0.001)
+            speed_mib_s = filesize / elapsed / 1024 / 1024
+            print(f"\nЗагрузка завершена! FTP: {resp} ({elapsed:.1f}s, {speed_mib_s:.2f} MiB/s)")
+
+            # Проверка результата.
+            if not resp or not str(resp).startswith("226"):
+                raise RuntimeError(f"FTP upload failed, server reply: {resp}")
+
+            return resp
+
+        except (FTPS_ERRORS, RuntimeError) as e:
+            last_error = e
+            is_last_attempt = attempt_index >= len(blocksize_candidates)
+            if is_p1s and not is_last_attempt:
+                print(
+                    f"[{host}] Быстрый режим P1S blocksize={active_blocksize // 1024} KB"
+                    f" не сработал: {e}. Повторяю в совместимом режиме."
+                )
+                continue
+            raise RuntimeError(f"FTPS upload error: {e}") from e
+
+        finally:
+            if ftps:
                 try:
-                    ftps.close()
+                    if ftps.sock:
+                        ftps.quit()
                 except Exception:
-                    pass
+                    try:
+                        ftps.close()
+                    except Exception:
+                        pass
+
+    raise RuntimeError(f"FTPS upload error: {last_error}")

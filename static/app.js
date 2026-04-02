@@ -11,6 +11,7 @@ const appState = {
   drawerActionPending: false,
   maintenanceByPrinter: new Map(),
   materialEditorByPrinter: new Map(),
+  nozzleEditorByPrinter: new Map(),
 };
 
 const MAINTENANCE_EVENT_OPTIONS = [
@@ -22,7 +23,8 @@ const MAINTENANCE_EVENT_OPTIONS = [
   { value: "OTHER", label: "Другое" },
 ];
 
-const MAINTENANCE_NOZZLE_OPTIONS = ["0.2", "0.4", "0.6"];
+const P1S_NOZZLE_DIAMETER_OPTIONS = ["0.2", "0.4", "0.6", "0.8"];
+const MAINTENANCE_NOZZLE_OPTIONS = [...P1S_NOZZLE_DIAMETER_OPTIONS];
 const MAINTENANCE_PERFORMED_BY_PLACEHOLDER = "Не указано";
 
 async function loadPrinters() {
@@ -69,6 +71,17 @@ function normalizeMaterialValue(value) {
   return normalized === "—" ? "" : normalized;
 }
 
+function normalizeNozzleDiameterValue(value) {
+  if (!hasStatusValue(value)) return "";
+  const normalized = String(value).trim().replace(",", ".");
+  if (!normalized || normalized === "—") return "";
+  const numeric = Number(normalized);
+  if (Number.isFinite(numeric)) {
+    return numeric.toFixed(1);
+  }
+  return normalized;
+}
+
 function createDefaultMaterialEditorState(currentValue = "") {
   return {
     isEditing: false,
@@ -106,6 +119,54 @@ function scheduleMaterialEditorMessageClear(printerId, delayMs = 5000) {
   clearMaterialEditorMessageTimer(state);
   state.messageTimeoutId = setTimeout(() => {
     const currentState = appState.materialEditorByPrinter.get(printerId);
+    if (!currentState) return;
+    currentState.message = "";
+    currentState.messageKind = "";
+    currentState.messageTimeoutId = null;
+
+    if (appState.drawerPrinterId === printerId && appState.drawerTab === "general" && appState.drawerDetails) {
+      renderPrinterDetails(appState.drawerDetails);
+    }
+  }, delayMs);
+}
+
+function createDefaultNozzleEditorState(currentValue = "0.4") {
+  return {
+    isEditing: false,
+    draft: normalizeNozzleDiameterValue(currentValue) || "0.4",
+    saving: false,
+    message: "",
+    messageKind: "",
+    messageTimeoutId: null,
+  };
+}
+
+function getNozzleEditorState(printerId, currentValue = "0.4") {
+  let state = appState.nozzleEditorByPrinter.get(printerId);
+  if (!state) {
+    state = createDefaultNozzleEditorState(currentValue);
+    appState.nozzleEditorByPrinter.set(printerId, state);
+    return state;
+  }
+
+  if (!state.isEditing && !state.saving) {
+    state.draft = normalizeNozzleDiameterValue(currentValue) || "0.4";
+  }
+
+  return state;
+}
+
+function clearNozzleEditorMessageTimer(state) {
+  if (!state?.messageTimeoutId) return;
+  clearTimeout(state.messageTimeoutId);
+  state.messageTimeoutId = null;
+}
+
+function scheduleNozzleEditorMessageClear(printerId, delayMs = 5000) {
+  const state = getNozzleEditorState(printerId);
+  clearNozzleEditorMessageTimer(state);
+  state.messageTimeoutId = setTimeout(() => {
+    const currentState = appState.nozzleEditorByPrinter.get(printerId);
     if (!currentState) return;
     currentState.message = "";
     currentState.messageKind = "";
@@ -214,7 +275,13 @@ function startDetailsAutoRefresh() {
       return;
     }
     const materialEditorState = appState.materialEditorByPrinter.get(appState.drawerPrinterId);
-    if (materialEditorState?.isEditing || materialEditorState?.saving) {
+    const nozzleEditorState = appState.nozzleEditorByPrinter.get(appState.drawerPrinterId);
+    if (
+      materialEditorState?.isEditing
+      || materialEditorState?.saving
+      || nozzleEditorState?.isEditing
+      || nozzleEditorState?.saving
+    ) {
       return;
     }
     loadPrinterDetails(appState.drawerPrinterId, { silent: true });
@@ -532,6 +599,21 @@ function updatePrinterMaterialInUi(printerId, loadedMaterial) {
   const nextStatus = {
     ...currentStatus,
     loaded_material: normalizeMaterialValue(loadedMaterial) || null,
+  };
+  appState.statusMap.set(printerId, nextStatus);
+
+  document.querySelectorAll(".printer-btn").forEach((btn) => {
+    if (btn.dataset.printerId === printerId) {
+      applyStatusClass(btn, nextStatus);
+    }
+  });
+}
+
+function updatePrinterNozzleInUi(printerId, nozzleDiameter) {
+  const currentStatus = appState.statusMap.get(printerId) || { id: printerId };
+  const nextStatus = {
+    ...currentStatus,
+    nozzle_diameter: normalizeNozzleDiameterValue(nozzleDiameter) || null,
   };
   appState.statusMap.set(printerId, nextStatus);
 
