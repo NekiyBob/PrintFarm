@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_file
 
 from file_weight_store import FileWeightStore
 from maintenance_db import init_maintenance_db
@@ -28,6 +28,7 @@ from printer_client import start_print_on_printer, upload_file_to_printer
 from printer_history import PrinterHistory
 from printer_lan import Printer
 from project_weight import get_total_weight_from_gcode_3mf
+from remote_agent_store import RemoteAgentStore
 from status_utils import extract_loaded_material_from_payload
 
 
@@ -37,6 +38,7 @@ DEFAULT_UPLOAD_WORKERS = 12
 DEFAULT_RESTART_WORKERS = 12
 DEFAULT_METADATA_WORKERS = 8
 JOB_RETENTION_SEC = 6 * 60 * 60
+COMMAND_RETENTION_SEC = 24 * 60 * 60
 FINISH_HIGHLIGHT_SEC = 15 * 60
 MQTT_OFFLINE_AFTER_SEC = 180.0
 DEFAULT_FILAMENT_REMAINING_G = 1000
@@ -52,6 +54,12 @@ HISTORY_PATH = BASE_DIR / "printer_history.json"
 FILE_WEIGHTS_PATH = BASE_DIR / "file_weights.json"
 MAINTENANCE_DB_PATH = BASE_DIR / "maintance"
 JOBS_DIR = BASE_DIR / "jobs"
+REMOTE_STATE_DIR = BASE_DIR / "remote_state"
+
+APP_ROLE = str(os.environ.get("PRINTFARM_ROLE") or "standalone").strip().lower()
+LOCAL_PRINTER_IO_ENABLED = APP_ROLE != "server"
+AGENT_SHARED_TOKEN = str(os.environ.get("PRINTFARM_AGENT_TOKEN") or "").strip()
+AGENT_AUTH_REQUIRED = APP_ROLE == "server" or bool(AGENT_SHARED_TOKEN)
 
 STATUS_CACHE: dict[str, dict[str, Any]] = {}
 STATUS_LOCK = threading.Lock()
@@ -99,6 +107,8 @@ PRINTERS, PRINTERS_BY_ID = _load_printers_config(CONFIG_PATH)
 HISTORY = PrinterHistory(str(HISTORY_PATH))
 FILE_WEIGHTS = FileWeightStore(str(FILE_WEIGHTS_PATH))
 MAINTENANCE_ENGINE = init_maintenance_db(MAINTENANCE_DB_PATH)
+REMOTE_STORE = RemoteAgentStore(REMOTE_STATE_DIR)
+STATUS_CACHE.update(REMOTE_STORE.list_statuses())
 
 
 def _ensure_filament_history_defaults() -> None:
@@ -119,6 +129,12 @@ def get_printer(printer_id: str) -> Optional[dict[str, Any]]:
     return PRINTERS_BY_ID.get(printer_id)
 
 
+def _is_printer_configured(printer: dict[str, Any]) -> bool:
+    if "configured" in printer:
+        return bool(printer.get("configured"))
+    return bool(printer.get("ip") and printer.get("serial") and printer.get("access_code"))
+
+
 def _sanitize_printer(printer: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": printer["id"],
@@ -128,8 +144,58 @@ def _sanitize_printer(printer: dict[str, Any]) -> dict[str, Any]:
         "slot": printer.get("slot"),
         "model": printer.get("model"),
         "name": printer.get("name"),
-        "configured": bool(printer.get("ip") and printer.get("serial") and printer.get("access_code")),
+        "configured": _is_printer_configured(printer),
     }
+
+
+def _extract_bearer_token() -> str:
+    header = str(request.headers.get("Authorization") or "").strip()
+    if not header.lower().startswith("bearer "):
+        return ""
+    return header[7:].strip()
+
+
+def _require_agent_auth() -> Optional[tuple[Any, int]]:
+    if not AGENT_AUTH_REQUIRED:
+        return None
+
+    if not AGENT_SHARED_TOKEN:
+        return jsonify({"error": "agent_token_not_configured"}), 500
+
+    if _extract_bearer_token() == AGENT_SHARED_TOKEN:
+        return None
+
+    return jsonify({"error": "unauthorized"}), 401
+
+
+def _queue_printer_command(
+    command_type: str,
+    *,
+    printer_id: str,
+    payload: Optional[dict[str, Any]] = None,
+    job_id: Optional[str] = None,
+) -> dict[str, Any]:
+    return REMOTE_STORE.create_command(
+        command_type,
+        printer_id=printer_id,
+        payload=payload,
+        job_id=job_id,
+        scope="printer",
+    )
+
+
+def _queue_farm_command(
+    command_type: str,
+    *,
+    payload: Optional[dict[str, Any]] = None,
+    job_id: Optional[str] = None,
+) -> dict[str, Any]:
+    return REMOTE_STORE.create_command(
+        command_type,
+        payload=payload,
+        job_id=job_id,
+        scope="farm",
+    )
 
 
 def _safe_float(value: Any) -> Optional[float]:
@@ -298,7 +364,7 @@ def _build_printer_details(
     status_payload: Optional[dict[str, Any]] = None,
     cached_status: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
-    configured = bool(printer.get("ip") and printer.get("serial") and printer.get("access_code"))
+    configured = _is_printer_configured(printer)
     payload = _normalize_status_payload_for_model(printer, status_payload)
     print_block = payload.get("print") or {}
     cached_status = cached_status or {}
@@ -374,6 +440,17 @@ def _require_configured_printer(printer_id: str) -> tuple[Optional[dict[str, Any
         return None, error_response
 
     if not (printer.get("ip") and printer.get("serial") and printer.get("access_code")):
+        return None, (jsonify({"error": "missing_config"}), 400)
+
+    return printer, None
+
+
+def _require_remote_printer(printer_id: str) -> tuple[Optional[dict[str, Any]], Optional[tuple[Any, int]]]:
+    printer, error_response = _get_printer_or_error(printer_id)
+    if error_response:
+        return None, error_response
+
+    if not _is_printer_configured(printer):
         return None, (jsonify({"error": "missing_config"}), 400)
 
     return printer, None
@@ -567,6 +644,8 @@ def _cleanup_finished_jobs(now: Optional[float] = None) -> None:
             JOBS.pop(job_id, None)
             JOB_COMPLETIONS.pop(job_id, None)
 
+    REMOTE_STORE.cleanup_commands(keep_sec=COMMAND_RETENTION_SEC)
+
 
 def _job_snapshot(job_id: str) -> Optional[dict[str, Any]]:
     with JOBS_LOCK:
@@ -610,13 +689,81 @@ def _job_done(job_id: str, pid: str, ok: bool, message: Optional[str] = None) ->
             job["finished_ts"] = time.time()
 
 
+def _job_mark_remote_queued(job_id: str, pid: str) -> None:
+    _job_set(job_id, pid, stage="queued", message="awaiting_agent")
+
+
+def _job_apply_remote_progress(
+    job_id: str,
+    pid: str,
+    *,
+    stage: Optional[str] = None,
+    message: Optional[str] = None,
+    file: Optional[str] = None,
+    progress_percent: Optional[float] = None,
+    ok: Optional[bool] = None,
+) -> None:
+    fields: dict[str, Any] = {}
+    if stage is not None:
+        fields["stage"] = stage
+    if message is not None:
+        fields["message"] = message
+    if file is not None:
+        fields["file"] = file
+    if progress_percent is not None:
+        fields["progress_percent"] = max(0.0, min(float(progress_percent), 100.0))
+    if fields:
+        _job_set(job_id, pid, **fields)
+
+    if stage == "started" and file:
+        HISTORY.set_started(pid, file)
+
+    if ok is not None:
+        _job_done(job_id, pid, ok=ok, message=message)
+
+
+def _resolve_job_artifact_path(job_id: str, filename: str) -> Optional[Path]:
+    normalized_job_id = str(job_id or "").strip()
+    normalized_name = os.path.basename(str(filename or "").strip())
+    if not normalized_job_id or not normalized_name:
+        return None
+
+    candidate = (JOBS_DIR / normalized_job_id / normalized_name).resolve()
+    jobs_root = JOBS_DIR.resolve()
+    if candidate.parent != (jobs_root / normalized_job_id):
+        return None
+    if not candidate.exists() or not candidate.is_file():
+        return None
+    return candidate
+
+
+def _validate_remote_job_printer(job_id: str, pid: str) -> Optional[dict[str, Any]]:
+    printer = get_printer(pid)
+    if not printer:
+        _job_set(job_id, pid, stage="not_found", message=None)
+        _job_done(job_id, pid, ok=False, message="not_found")
+        return None
+
+    if not _is_printer_configured(printer):
+        _job_set(job_id, pid, stage="missing_config", message=None)
+        _job_done(job_id, pid, ok=False, message="missing_config")
+        return None
+
+    _job_mark_remote_queued(job_id, pid)
+    return printer
+
+
 def _merge_status_cache(pid: str, **fields: Any) -> None:
+    next_status: Optional[dict[str, Any]] = None
     with STATUS_LOCK:
         current = dict(STATUS_CACHE.get(pid) or {"id": pid})
         for key, value in fields.items():
             if value is not None and value != "":
                 current[key] = value
         STATUS_CACHE[pid] = current
+        next_status = dict(current)
+    if next_status is not None:
+        REMOTE_STORE.set_status(pid, next_status)
 
 
 def _refresh_one_printer_metadata(printer: dict[str, Any]) -> None:
@@ -738,7 +885,10 @@ def _process_one_printer(
         return _cb
 
     try:
-        _job_set(job_id, pid, stage="uploading", message=None)
+        _job_set(job_id, pid, stage="uploading", message=None, progress_percent=0.0)
+
+        def on_upload_progress(percent, bytes_sent, total_bytes):
+            _job_set(job_id, pid, stage="uploading", progress_percent=percent)
 
         def do_upload():
             with UPLOAD_SEM:
@@ -747,6 +897,7 @@ def _process_one_printer(
                     access_code,
                     temp_path,
                     model=printer.get("model") or "",
+                    progress_callback=on_upload_progress,
                 )
 
         retry(
@@ -757,7 +908,7 @@ def _process_one_printer(
             on_retry=log_retry("uploading"),
         )
 
-        _job_set(job_id, pid, stage="uploaded", message=None)
+        _job_set(job_id, pid, stage="uploaded", message=None, progress_percent=100.0)
         time.sleep(1.5)
 
         _job_set(job_id, pid, stage="starting", message=None)
@@ -797,7 +948,10 @@ def _upload_only_one_printer(job_id: str, pid: str, printer: dict[str, Any], tem
         return _cb
 
     try:
-        _job_set(job_id, pid, stage="uploading", message=None)
+        _job_set(job_id, pid, stage="uploading", message=None, progress_percent=0.0)
+
+        def on_upload_progress(percent, bytes_sent, total_bytes):
+            _job_set(job_id, pid, stage="uploading", progress_percent=percent)
 
         def do_upload():
             with UPLOAD_SEM:
@@ -806,6 +960,7 @@ def _upload_only_one_printer(job_id: str, pid: str, printer: dict[str, Any], tem
                     access_code,
                     temp_path,
                     model=printer.get("model") or "",
+                    progress_callback=on_upload_progress,
                 )
 
         retry(
@@ -816,7 +971,7 @@ def _upload_only_one_printer(job_id: str, pid: str, printer: dict[str, Any], tem
             on_retry=log_retry("uploading"),
         )
 
-        _job_set(job_id, pid, stage="uploaded", message="saved_to_sd")
+        _job_set(job_id, pid, stage="uploaded", message="saved_to_sd", progress_percent=100.0)
         _job_done(job_id, pid, ok=True, message="saved_to_sd")
 
     except Exception as exc:
@@ -1032,6 +1187,7 @@ def _on_status(pid: str, status: dict[str, Any]) -> None:
 
     with STATUS_LOCK:
         STATUS_CACHE[pid] = status_for_cache
+    REMOTE_STORE.set_status(pid, status_for_cache)
 
     history_event = HISTORY.note_report(
         pid=pid,
@@ -1049,6 +1205,7 @@ def _on_status(pid: str, status: dict[str, Any]) -> None:
                 current = dict(STATUS_CACHE.get(pid) or {"id": pid})
                 current["filament_remaining_g"] = remaining_after_print
                 STATUS_CACHE[pid] = current
+            REMOTE_STORE.set_status(pid, STATUS_CACHE.get(pid) or {"id": pid})
 
 
 def _build_mqtt_manager() -> MqttStatusManager:
@@ -1110,7 +1267,8 @@ app = Flask(__name__)
 @app.get("/api/status")
 def api_status():
     _cleanup_finished_jobs()
-    _ensure_mqtt_manager()
+    if LOCAL_PRINTER_IO_ENABLED:
+        _ensure_mqtt_manager()
     now = time.time()
 
     with STATUS_LOCK:
@@ -1247,6 +1405,9 @@ def api_printer_details(printer_id: str):
     with STATUS_LOCK:
         cached_status = deepcopy(STATUS_CACHE.get(printer_id))
 
+    if not LOCAL_PRINTER_IO_ENABLED:
+        return jsonify(_build_printer_details(printer, cached_status=cached_status))
+
     if not (printer.get("ip") and printer.get("serial") and printer.get("access_code")):
         return jsonify(_build_printer_details(printer, {"ok": False, "error": "missing_config"}, cached_status=cached_status))
 
@@ -1330,6 +1491,14 @@ def api_set_printer_nozzle_diameter(printer_id: str):
 
 @app.post("/api/printers/<printer_id>/pause")
 def api_printer_pause(printer_id: str):
+    if not LOCAL_PRINTER_IO_ENABLED:
+        printer, error_response = _require_remote_printer(printer_id)
+        if error_response:
+            return error_response
+
+        command = _queue_printer_command("pause", printer_id=printer["id"])
+        return jsonify({"ok": True, "queued": True, "command_id": command["id"]})
+
     printer, error_response = _require_configured_printer(printer_id)
     if error_response:
         return error_response
@@ -1345,6 +1514,14 @@ def api_printer_pause(printer_id: str):
 
 @app.post("/api/printers/<printer_id>/resume")
 def api_printer_resume(printer_id: str):
+    if not LOCAL_PRINTER_IO_ENABLED:
+        printer, error_response = _require_remote_printer(printer_id)
+        if error_response:
+            return error_response
+
+        command = _queue_printer_command("resume", printer_id=printer["id"])
+        return jsonify({"ok": True, "queued": True, "command_id": command["id"]})
+
     printer, error_response = _require_configured_printer(printer_id)
     if error_response:
         return error_response
@@ -1360,6 +1537,14 @@ def api_printer_resume(printer_id: str):
 
 @app.post("/api/printers/<printer_id>/stop")
 def api_printer_stop(printer_id: str):
+    if not LOCAL_PRINTER_IO_ENABLED:
+        printer, error_response = _require_remote_printer(printer_id)
+        if error_response:
+            return error_response
+
+        command = _queue_printer_command("stop", printer_id=printer["id"])
+        return jsonify({"ok": True, "queued": True, "command_id": command["id"]})
+
     printer, error_response = _require_configured_printer(printer_id)
     if error_response:
         return error_response
@@ -1425,6 +1610,30 @@ def api_upload_and_print():
             "printers": {pid: {"stage": "queued"} for pid in printer_ids},
         }
 
+    if not LOCAL_PRINTER_IO_ENABLED:
+        valid_count = 0
+        for pid in printer_ids:
+            printer = _validate_remote_job_printer(job_id, pid)
+            if not printer:
+                continue
+
+            valid_count += 1
+            _queue_printer_command(
+                "upload_and_print",
+                printer_id=printer["id"],
+                job_id=job_id,
+                payload={
+                    "job_id": job_id,
+                    "filename": original_name,
+                    "project_plate_path": project_plate_path,
+                },
+            )
+
+        if valid_count == 0:
+            _cleanup_upload_artifacts(str(temp_path))
+
+        return jsonify({"job_id": job_id})
+
     thread = threading.Thread(
         target=_run_job,
         args=(job_id, printer_ids, str(temp_path), original_name, project_plate_path),
@@ -1486,6 +1695,29 @@ def api_upload_to_sd():
             "printers": {pid: {"stage": "queued"} for pid in printer_ids},
         }
 
+    if not LOCAL_PRINTER_IO_ENABLED:
+        valid_count = 0
+        for pid in printer_ids:
+            printer = _validate_remote_job_printer(job_id, pid)
+            if not printer:
+                continue
+
+            valid_count += 1
+            _queue_printer_command(
+                "upload_to_sd",
+                printer_id=printer["id"],
+                job_id=job_id,
+                payload={
+                    "job_id": job_id,
+                    "filename": original_name,
+                },
+            )
+
+        if valid_count == 0:
+            _cleanup_upload_artifacts(str(temp_path))
+
+        return jsonify({"job_id": job_id})
+
     thread = threading.Thread(
         target=_run_upload_only_job,
         args=(job_id, printer_ids, str(temp_path)),
@@ -1524,6 +1756,30 @@ def api_restart_last_printed():
             "printers": {pid: {"stage": "queued"} for pid in printer_ids},
         }
 
+    if not LOCAL_PRINTER_IO_ENABLED:
+        for pid in printer_ids:
+            printer = _validate_remote_job_printer(job_id, pid)
+            if not printer:
+                continue
+
+            restart_file = HISTORY.get_last_printed(pid)
+            if not restart_file:
+                _job_set(job_id, pid, stage="error", message="no_last_printed")
+                _job_done(job_id, pid, ok=False, message="no_last_printed")
+                continue
+
+            _queue_printer_command(
+                "restart_last_printed",
+                printer_id=printer["id"],
+                job_id=job_id,
+                payload={
+                    "job_id": job_id,
+                    "restart_file": restart_file,
+                },
+            )
+
+        return jsonify({"job_id": job_id})
+
     thread = threading.Thread(
         target=_run_restart_job,
         args=(job_id, printer_ids),
@@ -1537,6 +1793,10 @@ def api_restart_last_printed():
 @app.post("/api/mqtt/restart")
 def api_mqtt_restart():
     global MQTT_MANAGER
+
+    if not LOCAL_PRINTER_IO_ENABLED:
+        command = _queue_farm_command("restart_mqtt")
+        return jsonify({"ok": True, "queued": True, "command_id": command["id"]})
 
     try:
         _reload_printers_config()
@@ -1560,15 +1820,143 @@ def api_mqtt_restart():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@app.post("/internal/status")
+def internal_push_status():
+    auth_error = _require_agent_auth()
+    if auth_error:
+        return auth_error
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "request body must be a JSON object"}), 400
+
+    raw_statuses = data.get("statuses")
+    if not isinstance(raw_statuses, list):
+        return jsonify({"error": "statuses must be a JSON array"}), 400
+
+    accepted = 0
+    for raw_status in raw_statuses:
+        if not isinstance(raw_status, dict):
+            continue
+        pid = str(raw_status.get("id") or "").strip()
+        if not pid:
+            continue
+        accepted += 1
+        _on_status(pid, raw_status)
+
+    agent_id = str(data.get("agent_id") or "").strip()
+    printer_ids = [str(item).strip() for item in data.get("printer_ids", []) if str(item).strip()]
+    if agent_id:
+        REMOTE_STORE.record_agent_heartbeat(
+            agent_id,
+            printer_ids=printer_ids,
+            meta={"kind": "status_push"},
+        )
+
+    return jsonify({"ok": True, "accepted": accepted})
+
+
+@app.post("/internal/commands/pull")
+def internal_pull_commands():
+    auth_error = _require_agent_auth()
+    if auth_error:
+        return auth_error
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "request body must be a JSON object"}), 400
+
+    agent_id = str(data.get("agent_id") or "").strip()
+    if not agent_id:
+        return jsonify({"error": "agent_id is required"}), 400
+
+    printer_ids = [str(item).strip() for item in data.get("printer_ids", []) if str(item).strip()]
+    limit = _safe_int(data.get("limit")) or 10
+    limit = max(1, min(limit, 50))
+
+    REMOTE_STORE.record_agent_heartbeat(
+        agent_id,
+        printer_ids=printer_ids,
+        meta={"kind": "command_pull"},
+    )
+    commands = REMOTE_STORE.claim_commands(agent_id=agent_id, printer_ids=printer_ids, limit=limit)
+    return jsonify({"commands": commands})
+
+
+@app.post("/internal/commands/<command_id>/result")
+def internal_complete_command(command_id: str):
+    auth_error = _require_agent_auth()
+    if auth_error:
+        return auth_error
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "request body must be a JSON object"}), 400
+
+    ok = bool(data.get("ok"))
+    completed = REMOTE_STORE.complete_command(
+        command_id,
+        ok=ok,
+        message=str(data.get("message") or "").strip() or None,
+        result=data.get("result") if isinstance(data.get("result"), dict) else None,
+        agent_id=str(data.get("agent_id") or "").strip() or None,
+    )
+    if completed is None:
+        return jsonify({"error": "command_not_found"}), 404
+
+    return jsonify({"ok": True, "command": completed})
+
+
+@app.post("/internal/jobs/<job_id>/progress")
+def internal_job_progress(job_id: str):
+    auth_error = _require_agent_auth()
+    if auth_error:
+        return auth_error
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "request body must be a JSON object"}), 400
+
+    printer_id = str(data.get("printer_id") or "").strip()
+    if not printer_id:
+        return jsonify({"error": "printer_id is required"}), 400
+
+    ok_value = data.get("ok")
+    normalized_ok = None if ok_value is None else bool(ok_value)
+    _job_apply_remote_progress(
+        job_id,
+        printer_id,
+        stage=str(data.get("stage") or "").strip() or None,
+        message=str(data.get("message") or "").strip() or None,
+        file=str(data.get("file") or "").strip() or None,
+        progress_percent=_safe_float(data.get("progress_percent")),
+        ok=normalized_ok,
+    )
+    return jsonify({"ok": True})
+
+
+@app.get("/internal/jobs/<job_id>/artifact/<path:filename>")
+def internal_job_artifact(job_id: str, filename: str):
+    auth_error = _require_agent_auth()
+    if auth_error:
+        return auth_error
+
+    artifact_path = _resolve_job_artifact_path(job_id, filename)
+    if artifact_path is None:
+        return jsonify({"error": "artifact_not_found"}), 404
+
+    return send_file(artifact_path, as_attachment=True, download_name=artifact_path.name)
+
+
 if __name__ == "__main__":
     import os
     from werkzeug.middleware.proxy_fix import ProxyFix
 
     app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
-    debug_mode = True
+    debug_mode = False
 
-    if not debug_mode or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+    if LOCAL_PRINTER_IO_ENABLED and (not debug_mode or os.environ.get("WERKZEUG_RUN_MAIN") == "true"):
         _ensure_mqtt_manager()
 
     app.run(host="0.0.0.0", port=8080, debug=debug_mode)

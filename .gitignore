@@ -3,6 +3,8 @@ test.py
 t2.gcode
 p1sFileSend.py
 jobs/
+agent_jobs/
+remote_state/
 TESTS/
 __pycache__/
 MqttTest.py

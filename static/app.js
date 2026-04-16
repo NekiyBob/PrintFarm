@@ -662,7 +662,9 @@ async function pollJob(jobId, statusEl, buttonsToDisable = []) {
     for (const [pid, state] of Object.entries(job.printers || {})) {
       const msg = state.message ? ` (${state.message})` : "";
       const file = state.file ? ` [${state.file}]` : "";
-      out += `${pid}${file}: ${state.stage}${msg}\n`;
+      const uploadPercent = Number(state.progress_percent);
+      const progress = Number.isFinite(uploadPercent) ? ` ${uploadPercent.toFixed(1)}%` : "";
+      out += `${pid}${file}: ${state.stage}${progress}${msg}\n`;
     }
 
     statusEl.textContent = out;
